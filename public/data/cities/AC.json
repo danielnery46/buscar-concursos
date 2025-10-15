@@ -1,0 +1,25 @@
+
+[
+  { "name": "Acrelândia", "normalizedName": "acrelandia", "lat": -9.826, "lon": -66.897 },
+  { "name": "Assis Brasil", "normalizedName": "assis brasil", "lat": -10.94, "lon": -69.57 },
+  { "name": "Brasiléia", "normalizedName": "brasileia", "lat": -11.011, "lon": -68.749 },
+  { "name": "Bujari", "normalizedName": "bujari", "lat": -9.324, "lon": -67.951 },
+  { "name": "Capixaba", "normalizedName": "capixaba", "lat": -10.57, "lon": -67.68 },
+  { "name": "Cruzeiro do Sul", "normalizedName": "cruzeiro do sul", "lat": -7.63, "lon": -72.67 },
+  { "name": "Epitaciolândia", "normalizedName": "epitaciolandia", "lat": -11.02, "lon": -68.74 },
+  { "name": "Feijó", "normalizedName": "feijo", "lat": -8.16, "lon": -70.35 },
+  { "name": "Jordão", "normalizedName": "jordao", "lat": -8.93, "lon": -71.88 },
+  { "name": "Mâncio Lima", "normalizedName": "mancio lima", "lat": -7.61, "lon": -72.9 },
+  { "name": "Manoel Urbano", "normalizedName": "manoel urbano", "lat": -8.83, "lon": -69.25 },
+  { "name": "Marechal Thaumaturgo", "normalizedName": "marechal thaumaturgo", "lat": -8.94, "lon": -72.82 },
+  { "name": "Plácido de Castro", "normalizedName": "placido de castro", "lat": -10.28, "lon": -67.15 },
+  { "name": "Porto Walter", "normalizedName": "porto walter", "lat": -8.26, "lon": -72.74 },
+  { "name": "Rio Branco", "normalizedName": "rio branco", "lat": -9.97, "lon": -67.81 },
+  { "name": "Rodrigues Alves", "normalizedName": "rodrigues alves", "lat": -7.74, "lon": -72.65 },
+  { "name": "Santa Rosa do Purus", "normalizedName": "santa rosa do purus", "lat": -9.44, "lon": -70.49 },
+  { "name": "Senador Guiomard", "normalizedName": "senador guiomard", "lat": -10.15, "lon": -67.58 },
+  { "name": "Sena Madureira", "normalizedName": "sena madureira", "lat": -9.06, "lon": -68.65 },
+  { "name": "Tarauacá", "normalizedName": "tarauaca", "lat": -8.16, "lon": -70.76 },
+  { "name": "Xapuri", "normalizedName": "xapuri", "lat": -10.65, "lon": -68.5 },
+  { "name": "Porto Acre", "normalizedName": "porto acre", "lat": -9.58, "lon": -67.52 }
+]

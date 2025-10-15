@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<!--
+ * Copyright 2025 Daniel Nery Frangilo Paiva
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+-->
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cg id='documento'%3E%3Cpath d='M15 20 H 70 L 85 35 V 90 H 15 Z' fill='%23fff' stroke='%239ca3af' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M70 20 L 70 35 L 85 35 Z' fill='%23f3f4f6' stroke='%239ca3af' stroke-width='3' stroke-linejoin='round'/%3E%3Crect x='25' y='50' width='50' height='4' rx='2' fill='%23d1d5db'/%3E%3Crect x='25' y='62' width='50' height='4' rx='2' fill='%23d1d5db'/%3E%3Crect x='25' y='74' width='35' height='4' rx='2' fill='%23d1d5db'/%3E%3C/g%3E%3Cg id='lupa'%3E%3Ccircle cx='58' cy='45' r='23' fill='rgba(99, 102, 241, 0.2)' stroke='%236366f1' stroke-width='6'/%3E%3Cpath d='M75 62 L 93 80' stroke='%236366f1' stroke-width='10' stroke-linecap='round'/%3E%3C/g%3E%3C/svg%3E" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Buscar Concursos - Vagas de Concursos Públicos no Brasil</title>
+    <meta name="description" content="Encontre milhares de vagas em concursos públicos e processos seletivos abertos em todo o Brasil. Filtre por estado, cidade, salário, escolaridade e mais. Acompanhe também os concursos previstos." />
+    <meta name="keywords" content="concursos públicos, vagas abertas, processo seletivo, concursos 2025, edital, emprego público, pci concursos, concursos previstos" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://www.buscarconcursos.com.br/" />
+    <meta property="og:title" content="Buscar Concursos - Vagas de Concursos Públicos no Brasil" />
+    <meta property="og:description" content="Encontre milhares de vagas em concursos públicos e processos seletivos abertos em todo o Brasil. Filtre por estado, cidade, salário, escolaridade e mais. Acompanhe também os concursos previstos." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.buscarconcursos.com.br/" />
+    <meta property="og:image" content="https://placehold.co/1200x630/6366f1/FFFFFF?text=Buscar+Concursos" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Buscar Concursos - Vagas de Concursos Públicos no Brasil" />
+    <meta name="twitter:description" content="Encontre milhares de vagas em concursos públicos e processos seletivos abertos em todo o Brasil. Acompanhe também os concursos previstos." />
+    <meta name="twitter:image" content="https://placehold.co/1200x630/6366f1/FFFFFF?text=Buscar+Concursos" />
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Buscar Concursos",
+      "url": "https://www.buscarconcursos.com.br/",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://www.buscarconcursos.com.br/?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [{
+        "@type": "Question",
+        "name": "Como encontrar concursos na minha cidade?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Utilize nossos filtros de busca avançada. Você pode selecionar seu estado e, opcionalmente, digitar o nome da sua cidade para ver apenas os concursos e processos seletivos disponíveis na sua localidade."
+        }
+      },{
+        "@type": "Question",
+        "name": "Quais os tipos de vagas de concurso disponíveis?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "O Buscar Concursos agrega vagas para todos os níveis de escolaridade: fundamental, médio, técnico e superior. Você pode filtrar as vagas pelo nível desejado para encontrar a oportunidade ideal para sua formação."
+        }
+      },{
+        "@type": "Question",
+        "name": "O site é gratuito?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Sim, o Buscar Concursos é uma ferramenta 100% gratuita. Nosso objetivo é centralizar e facilitar o acesso a informações sobre concursos públicos em todo o Brasil."
+        }
+      },{
+        "@type": "Question",
+        "name": "O que são 'Concursos Previstos'?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Os concursos previstos são notícias sobre certames que estão em fase de planejamento, com comissão formada, banca definida ou autorização para serem lançados em breve. Eles ainda não têm edital publicado, mas são ótimos para quem quer se antecipar na preparação!"
+        }
+      }]
+    }
+    </script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+      }
+    </script>
+    <script>
+      (function() {
+        let theme = localStorage.getItem('theme');
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else if (theme === 'light') {
+          document.documentElement.classList.remove('dark');
+        } else { // 'auto' or null (default)
+          // No preference saved, default to auto theme for new users
+          if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        }
+      })();
+    </script>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.0.1",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "vite": "https://aistudiocdn.com/vite@^7.1.3",
+    "fs": "https://aistudiocdn.com/fs@^0.0.1-security",
+    "path": "https://aistudiocdn.com/path@^0.12.7",
+    "url": "https://aistudiocdn.com/url@^0.11.4",
+    "jsdom": "https://aistudiocdn.com/jsdom@^27.0.0",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.57.4",
+    "deno.ns": "https://aistudiocdn.com/deno.ns@^0.8.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <noscript>
+      <div style="padding: 2rem; text-align: center; font-family: sans-serif; background-color: #f0f0f0;">
+          <h1>Bem-vindo ao Buscar Concursos</h1>
+          <p>Para utilizar nosso site de busca de concursos, é necessário habilitar o JavaScript no seu navegador.</p>
+          <p>O Buscar Concursos é a sua ferramenta completa para encontrar vagas de concursos públicos e processos seletivos em todo o Brasil. Filtre por estado, cidade, salário e escolaridade. Acompanhe também os concursos previstos.</p>
+      </div>
+    </noscript>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

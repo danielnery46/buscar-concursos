@@ -1,0 +1,19 @@
+
+[
+  { "name": "Amapá", "normalizedName": "amapa", "lat": 2.05, "lon": -50.79 },
+  { "name": "Calçoene", "normalizedName": "calcoene", "lat": 2.5, "lon": -50.94 },
+  { "name": "Cutias", "normalizedName": "cutias", "lat": 0.98, "lon": -50.8 },
+  { "name": "Ferreira Gomes", "normalizedName": "ferreira gomes", "lat": 0.85, "lon": -51.18 },
+  { "name": "Itaubal", "normalizedName": "itaubal", "lat": 0.61, "lon": -50.67 },
+  { "name": "Laranjal do Jari", "normalizedName": "laranjal do jari", "lat": -0.84, "lon": -52.51 },
+  { "name": "Macapá", "normalizedName": "macapa", "lat": 0.03, "lon": -51.06 },
+  { "name": "Mazagão", "normalizedName": "mazagao", "lat": 0.11, "lon": -51.28 },
+  { "name": "Oiapoque", "normalizedName": "oiapoque", "lat": 3.84, "lon": -51.83 },
+  { "name": "Pedra Branca do Amapari", "normalizedName": "pedra branca do amapari", "lat": 0.77, "lon": -51.95 },
+  { "name": "Porto Grande", "normalizedName": "porto grande", "lat": 0.71, "lon": -51.41 },
+  { "name": "Pracuúba", "normalizedName": "pracuuba", "lat": 1.74, "lon": -50.78 },
+  { "name": "Santana", "normalizedName": "santana", "lat": -0.05, "lon": -51.18 },
+  { "name": "Serra do Navio", "normalizedName": "serra do navio", "lat": 0.9, "lon": -52.0 },
+  { "name": "Tartarugalzinho", "normalizedName": "tartarugalzinho", "lat": 1.5, "lon": -50.91 },
+  { "name": "Vitória do Jari", "normalizedName": "vitoria do jari", "lat": -0.93, "lon": -52.42 }
+]
