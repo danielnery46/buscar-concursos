@@ -126,7 +126,7 @@ export const ResultsList = memo(function ResultsList(props: ResultsListProps) {
     }
 
     const activeResults = activeTab === 'concursos' ? concursosResults : processosSeletivosResults;
-    const activeTotal = activeTab === 'concursos' ? totalConcursos : processosSeletivosResults.length;
+    const activeTotal = activeTab === 'concursos' ? totalConcursos : totalProcessos;
     const activePage = activeTab === 'concursos' ? concursosPage : processosPage;
     const activeSetPage = activeTab === 'concursos' ? setConcursosPage : setProcessosPage;
 
