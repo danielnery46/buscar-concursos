@@ -4,9 +4,10 @@ import { useAuth } from './AuthContext';
 import { supabase } from '../utils/supabase';
 import {
     ROTA_CIDADE_KEY, FAVORITE_SEARCHES_KEY, FAVORITE_PREDICTED_FILTERS_KEY, FAVORITE_NEWS_FILTERS_KEY,
-    DEFAULT_SEARCH_KEY, DEFAULT_PREDICTED_FILTER_KEY, DEFAULT_NEWS_FILTER_KEY, ACCESSIBILITY_SETTINGS_KEY
+    DEFAULT_SEARCH_KEY, DEFAULT_PREDICTED_FILTER_KEY, DEFAULT_NEWS_FILTER_KEY, ACCESSIBILITY_SETTINGS_KEY, THEME_KEY
 } from '../constants';
 import { useDebounce } from '../hooks/useDebounce';
+import { useModal } from './ModalContext';
 
 interface UserDataContextType {
     cidadeRota: string;
@@ -38,6 +39,8 @@ const getLocalItem = (key: string, defaultValue: any) => {
     } catch { return defaultValue; }
 };
 
+const defaultAccessibilitySettings: AccessibilitySettings = { highContrast: false, largerText: false, reduceMotion: false, uiScale: 100, openLinksInModal: true, showQuickAccess: true, dyslexicFont: false, highlightLinks: false, textSpacing: false, grayscale: false };
+
 // This maps the localStorage keys to the database column names.
 const keyToColumnMap: { [key: string]: string } = {
     [ROTA_CIDADE_KEY]: 'rota_cidade',
@@ -54,33 +57,23 @@ const usePersistentState = <T,>(value: T, user: User | null, isLoaded: boolean, 
     const isInitialRunAfterLoad = useRef(true);
 
     useEffect(() => {
-        // Reset the flag whenever the context is not 'loaded'. This happens on initial mount and on user changes.
         if (!isLoaded) {
             isInitialRunAfterLoad.current = true;
         }
     }, [isLoaded]);
 
     useEffect(() => {
-        // Do not save anything until the initial data load is complete.
-        if (!isLoaded) return;
-
-        // Skip the very first effect run after data is loaded.
-        // This is crucial to prevent overwriting cloud data with stale initial state
-        // before the loaded data has been debounced.
-        if (isInitialRunAfterLoad.current) {
-            isInitialRunAfterLoad.current = false;
+        if (!isLoaded || isInitialRunAfterLoad.current) {
+            if (isLoaded) isInitialRunAfterLoad.current = false;
             return;
         }
         
         const saveState = async () => {
             if (user) {
                 const columnName = keyToColumnMap[key];
-                if (!columnName) {
-                    console.warn(`No database column mapping found for key: ${key}`);
-                    return;
-                }
+                if (!columnName) return;
                 const { error } = await supabase.from('user_data').upsert({ id: user.id, [columnName]: debouncedValue });
-                if (error) console.error(`Error saving ${key} to column ${columnName}:`, error);
+                if (error) console.error(`Error saving ${key}:`, error);
             } else {
                 try {
                     localStorage.setItem(key, JSON.stringify(debouncedValue));
@@ -100,7 +93,9 @@ interface UserDataProviderProps {
 
 export const UserDataProvider: FC<UserDataProviderProps> = ({ children }) => {
     const { user, loading: authLoading } = useAuth();
+    const { openModal, closeModal } = useModal();
     const [isUserDataLoaded, setIsUserDataLoaded] = useState(false);
+    const prevUserRef = useRef<User | null>(null);
 
     const [cidadeRota, setCidadeRota] = useState<string>('');
     const [favoriteSearches, setFavoriteSearches] = useState<SearchCriteria[]>([]);
@@ -110,33 +105,106 @@ export const UserDataProvider: FC<UserDataProviderProps> = ({ children }) => {
     const [defaultPredictedFilter, setDefaultPredictedFilter] = useState<PredictedCriteria | null>(null);
     const [defaultNewsFilter, setDefaultNewsFilter] = useState<PredictedCriteria | null>(null);
 
-    // Carrega os dados do usuário na mudança de autenticação
+    const userDataKeys = [ROTA_CIDADE_KEY, FAVORITE_SEARCHES_KEY, FAVORITE_PREDICTED_FILTERS_KEY, FAVORITE_NEWS_FILTERS_KEY, DEFAULT_SEARCH_KEY, DEFAULT_PREDICTED_FILTER_KEY, DEFAULT_NEWS_FILTER_KEY];
+    
     useEffect(() => {
         const loadUserData = async () => {
-            setIsUserDataLoaded(false); // Reset loading state on every auth change.
             if (authLoading) return;
-
-            if (user) {
-                const { data, error } = await supabase.from('user_data').select('*').eq('id', user.id).single();
-                if (error && error.code !== 'PGRST116') console.error('Error fetching user data:', error);
-
-                const mergeData = <T,>(cloudData: T, localKey: string, defaultValue: T): T => {
-                    const isCloudDataEmpty = !cloudData || (Array.isArray(cloudData) && cloudData.length === 0);
-                    if (isCloudDataEmpty) {
-                        const localData = getLocalItem(localKey, defaultValue);
-                        const isLocalDataPresent = localData && (!Array.isArray(localData) || localData.length > 0);
-                        if (isLocalDataPresent) return localData;
+            
+            const isLoggingIn = user && !prevUserRef.current;
+            
+            // Verifica se há dados locais modificados pelo usuário que diferem dos padrões do aplicativo.
+            const hasNonDefaultLocalData = () => {
+                const isDifferent = (key: string, defaultValue: any) => {
+                    const item = localStorage.getItem(key);
+                    // Se a chave não existe, está no estado padrão.
+                    if (item === null) return false;
+                    
+                    try {
+                        // Se existe, analisa e compara com o padrão.
+                        const localValue = JSON.parse(item);
+                        return JSON.stringify(localValue) !== JSON.stringify(defaultValue);
+                    } catch (e) {
+                        // Trata valores que não são JSON, como a chave do tema.
+                        if (key === THEME_KEY) {
+                            return item !== defaultValue;
+                        }
+                        // Trata erros de parsing como dados modificados.
+                        return true;
                     }
-                    return cloudData || defaultValue;
+                };
+            
+                if (isDifferent(ROTA_CIDADE_KEY, '')) return true;
+                if (isDifferent(FAVORITE_SEARCHES_KEY, [])) return true;
+                if (isDifferent(FAVORITE_PREDICTED_FILTERS_KEY, [])) return true;
+                if (isDifferent(FAVORITE_NEWS_FILTERS_KEY, [])) return true;
+                if (isDifferent(DEFAULT_SEARCH_KEY, null)) return true;
+                if (isDifferent(DEFAULT_PREDICTED_FILTER_KEY, null)) return true;
+                if (isDifferent(DEFAULT_NEWS_FILTER_KEY, null)) return true;
+                if (isDifferent(THEME_KEY, 'auto')) return true;
+                if (isDifferent(ACCESSIBILITY_SETTINGS_KEY, defaultAccessibilitySettings)) return true;
+            
+                return false;
+            };
+
+            const localDataIsModified = hasNonDefaultLocalData();
+
+            if (isLoggingIn && localDataIsModified) {
+                const { data: cloudData } = await supabase.from('user_data').select('*').eq('id', user.id).single();
+
+                const handleMigrate = () => {
+                    const mergeData = <T,>(cloudData: T, localKey: string, defaultValue: T): T => {
+                        const isCloudDataEmpty = !cloudData || (Array.isArray(cloudData) && cloudData.length === 0);
+                        if (isCloudDataEmpty) {
+                            const localData = getLocalItem(localKey, defaultValue);
+                            const isLocalDataPresent = localData && (!Array.isArray(localData) || localData.length > 0);
+                            if (isLocalDataPresent) return localData;
+                        }
+                        return cloudData || defaultValue;
+                    };
+                    
+                    setCidadeRota(mergeData(cloudData?.rota_cidade, ROTA_CIDADE_KEY, ''));
+                    setFavoriteSearches(mergeData(cloudData?.favorite_searches, FAVORITE_SEARCHES_KEY, []));
+                    setFavoritePredictedFilters(mergeData(cloudData?.favorite_predicted_filters, FAVORITE_PREDICTED_FILTERS_KEY, []));
+                    setFavoriteNewsFilters(mergeData(cloudData?.favorite_news_filters, FAVORITE_NEWS_FILTERS_KEY, []));
+                    setDefaultSearch(mergeData(cloudData?.default_search, DEFAULT_SEARCH_KEY, null));
+                    setDefaultPredictedFilter(mergeData(cloudData?.default_predicted_filter, DEFAULT_PREDICTED_FILTER_KEY, null));
+                    setDefaultNewsFilter(mergeData(cloudData?.default_news_filter, DEFAULT_NEWS_FILTER_KEY, null));
+                    
+                    window.dispatchEvent(new CustomEvent('migrationDecision', { detail: { action: 'migrate' } }));
+                    userDataKeys.forEach(key => localStorage.removeItem(key));
+                    setIsUserDataLoaded(true);
+                    closeModal();
                 };
 
-                setCidadeRota(mergeData(data?.rota_cidade, ROTA_CIDADE_KEY, ''));
-                setFavoriteSearches(mergeData(data?.favorite_searches, FAVORITE_SEARCHES_KEY, []));
-                setFavoritePredictedFilters(mergeData(data?.favorite_predicted_filters, FAVORITE_PREDICTED_FILTERS_KEY, []));
-                setFavoriteNewsFilters(mergeData(data?.favorite_news_filters, FAVORITE_NEWS_FILTERS_KEY, []));
-                setDefaultSearch(mergeData(data?.default_search, DEFAULT_SEARCH_KEY, null));
-                setDefaultPredictedFilter(mergeData(data?.default_predicted_filter, DEFAULT_PREDICTED_FILTER_KEY, null));
-                setDefaultNewsFilter(mergeData(data?.default_news_filter, DEFAULT_NEWS_FILTER_KEY, null));
+                const handleDiscard = () => {
+                    setCidadeRota(cloudData?.rota_cidade || '');
+                    setFavoriteSearches(cloudData?.favorite_searches || []);
+                    setFavoritePredictedFilters(cloudData?.favorite_predicted_filters || []);
+                    setFavoriteNewsFilters(cloudData?.favorite_news_filters || []);
+                    setDefaultSearch(cloudData?.default_search || null);
+                    setDefaultPredictedFilter(cloudData?.default_predicted_filter || null);
+                    setDefaultNewsFilter(cloudData?.default_news_filter || null);
+                    
+                    window.dispatchEvent(new CustomEvent('migrationDecision', { detail: { action: 'discard' } }));
+                    userDataKeys.forEach(key => localStorage.removeItem(key));
+                    setIsUserDataLoaded(true);
+                    closeModal();
+                };
+
+                openModal('dataMigration', { onMigrate: handleMigrate, onDiscard: handleDiscard });
+            } else if (user) {
+                const { data, error } = await supabase.from('user_data').select('*').eq('id', user.id).single();
+                if (error && error.code !== 'PGRST116') console.error('Error fetching user data:', error);
+                
+                setCidadeRota(data?.rota_cidade || '');
+                setFavoriteSearches(data?.favorite_searches || []);
+                setFavoritePredictedFilters(data?.favorite_predicted_filters || []);
+                setFavoriteNewsFilters(data?.favorite_news_filters || []);
+                setDefaultSearch(data?.default_search || null);
+                setDefaultPredictedFilter(data?.default_predicted_filter || null);
+                setDefaultNewsFilter(data?.default_news_filter || null);
+                setIsUserDataLoaded(true);
             } else {
                 setCidadeRota(getLocalItem(ROTA_CIDADE_KEY, ''));
                 setFavoriteSearches(getLocalItem(FAVORITE_SEARCHES_KEY, []));
@@ -145,11 +213,14 @@ export const UserDataProvider: FC<UserDataProviderProps> = ({ children }) => {
                 setDefaultSearch(getLocalItem(DEFAULT_SEARCH_KEY, null));
                 setDefaultPredictedFilter(getLocalItem(DEFAULT_PREDICTED_FILTER_KEY, null));
                 setDefaultNewsFilter(getLocalItem(DEFAULT_NEWS_FILTER_KEY, null));
+                setIsUserDataLoaded(true);
             }
-            setIsUserDataLoaded(true); // Mark as loaded only after all state setters have been called.
         };
+
+        setIsUserDataLoaded(false);
         loadUserData();
-    }, [user, authLoading]);
+        prevUserRef.current = user;
+    }, [user, authLoading, openModal, closeModal]);
     
     // Hooks de persistência
     usePersistentState(cidadeRota, user, isUserDataLoaded, ROTA_CIDADE_KEY);
@@ -161,8 +232,6 @@ export const UserDataProvider: FC<UserDataProviderProps> = ({ children }) => {
     usePersistentState(defaultNewsFilter, user, isUserDataLoaded, DEFAULT_NEWS_FILTER_KEY);
 
     const exportUserData = useCallback(() => {
-        // As configurações de acessibilidade estão em seu próprio contexto, então lemos do localStorage para simplicidade na exportação.
-        // Isso é um compromisso de design para evitar dependências complexas entre contextos.
         const accessibilitySettings = getLocalItem(ACCESSIBILITY_SETTINGS_KEY, {});
         const dataStr = JSON.stringify({
             version: "2.0.0",

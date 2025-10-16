@@ -1,13 +1,21 @@
-import React, { useEffect, useRef } from 'react';
-import { ProcessedPredictedJob, ArticleSortOption } from '../types';
+import React, { useState, useEffect } from 'react';
+import { ProcessedPredictedJob } from '../types';
 import { ArticleListPage } from './ArticleListPage';
 import { TabNewsIcon } from './Icons';
 import { useSettings } from '../contexts/SettingsContext';
 import { useUserData } from '../contexts/UserDataContext';
+import { supabase } from '../utils/supabase';
+
+const fetchAllArticlesForSources = async (table: 'predicted_openings' | 'news_articles'): Promise<ProcessedPredictedJob[]> => {
+    const { data, error } = await supabase.from(table).select('source');
+    if (error) {
+        console.error(`Error fetching sources from ${table}:`, error);
+        return [];
+    }
+    return data as ProcessedPredictedJob[];
+};
 
 const NewsPage: React.FC<{
-    news: ProcessedPredictedJob[];
-    isLoading: boolean;
     isFiltersOpen: boolean;
     setIsFiltersOpen: (isOpen: boolean) => void;
     mainContentRef: React.RefObject<HTMLDivElement>;
@@ -21,32 +29,17 @@ const NewsPage: React.FC<{
         setDefaultNewsFilter,
         isUserDataLoaded
     } = useUserData();
-    const [sortOption, setSortOption] = React.useState<ArticleSortOption>('date-desc');
-    const isInitialMount = useRef(true);
+    const [allArticles, setAllArticles] = useState<ProcessedPredictedJob[]>([]);
 
     useEffect(() => {
-        if (isInitialMount.current) {
-            isInitialMount.current = false;
-            return;
-        }
-
-        const timer = setTimeout(() => {
-            if (props.mainContentRef.current) {
-                props.mainContentRef.current.scrollTo({
-                    top: props.mainContentRef.current.scrollHeight,
-                    behavior: 'smooth'
-                });
-            }
-        }, 100);
-
-        return () => clearTimeout(timer);
-    }, [sortOption, props.mainContentRef]);
+        fetchAllArticlesForSources('news_articles').then(setAllArticles);
+    }, []);
 
     return (
         <ArticleListPage
             pageTitle="Notícias"
-            items={props.news}
-            isLoading={props.isLoading}
+            table="news_articles"
+            allArticles={allArticles}
             accessibilitySettings={accessibilitySettings}
             isFiltersOpen={props.isFiltersOpen}
             setIsFiltersOpen={props.setIsFiltersOpen}
@@ -59,8 +52,6 @@ const NewsPage: React.FC<{
             emptyStateTitle="Nenhuma Notícia Encontrada"
             emptyStateMessage="Não há notícias disponíveis no momento. Volte mais tarde!"
             itemType="news"
-            sortOption={sortOption}
-            onSortChange={setSortOption}
             onFilterCountChange={props.onFilterCountChange}
             isUserDataLoaded={isUserDataLoaded}
         />

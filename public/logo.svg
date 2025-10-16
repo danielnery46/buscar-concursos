@@ -1,0 +1,16 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <g id="documento">
+        <path d="M15 22 H 70 L 85 37 V 92 H 15 Z" fill="#000" opacity="0.08" transform="translate(2, 2)"/>
+        <path d="M15 20 H 70 L 85 35 V 90 H 15 Z" fill="#ffffff" stroke="#94a3b8" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M70 20 L 70 35 L 85 35 Z" fill="#f1f5f9" stroke="#94a3b8" stroke-width="3" stroke-linejoin="round"/>
+        <rect x="25" y="50" width="50" height="4" rx="2" fill="#cbd5e1" />
+        <rect x="25" y="62" width="50" height="4" rx="2" fill="#cbd5e1" />
+        <rect x="25" y="74" width="35" height="4" rx="2" fill="#cbd5e1" />
+    </g>
+    <g id="lupa">
+        <circle cx="58" cy="45" r="23" fill="#000" opacity="0.1" transform="translate(2, 2)" />
+        <path d="M75 62 L 93 80" stroke="#000" opacity="0.1" stroke-width="10" stroke-linecap="round" transform="translate(2, 2)" />
+        <circle cx="58" cy="45" r="23" fill="rgba(79, 70, 229, 0.2)" stroke="#4f46e5" stroke-width="6"/>
+        <path d="M75 62 L 93 80" stroke="#4f46e5" stroke-width="10" stroke-linecap="round"/>
+    </g>
+</svg>

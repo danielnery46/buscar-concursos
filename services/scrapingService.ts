@@ -14,168 +14,216 @@
  * limitations under the License.
  */
 
-// NOTE: This service fetches pre-scraped data from the backend; it does not perform scraping on the client-side.
-// The name is a remnant from an earlier project structure. Renaming it is avoided to prevent file duplication within the current environment.
-import { ProcessedJob, ProcessedPredictedJob } from '../types';
+import { ProcessedJob, ProcessedPredictedJob, SearchCriteria, PredictedCriteria } from '../types';
 import { supabase } from '../utils/supabase';
+// FIX: Import normalizeText from its dedicated module.
+import { normalizeText } from '../utils/text';
+import { ESTADOS_POR_REGIAO, VIZINHANCAS_ESTADOS } from '../constants';
 
-// The scraping logic has been moved to a Supabase Edge Function.
-// This service now fetches the pre-scraped data from Supabase tables.
+const JOB_OPENINGS_LIST_COLUMNS = 'title, organization, location, link, effective_city, logo_path, deadline_formatted, deadline_date, type, normalized_effective_city, max_salary_numeric, min_salary_numeric, vacancies_numeric, education_levels, parsed_salary_text, parsed_vacancies_text, mentioned_states';
+const PREDICTED_ARTICLES_COLUMNS = 'id, publication_date, title, link, source, mentioned_states';
 
-const PAGE_SIZE = 1000; // Supabase's default select limit
+const jobMapper = (item: any): ProcessedJob => ({
+    titulo: item.title,
+    orgao: item.organization,
+    localidade: item.location,
+    salario: item.parsed_salary_text || '', // Not used in UI, providing fallback
+    escolaridade: (item.education_levels || []).join(' / '), // Not used in UI, providing fallback
+    link: item.link,
+    cidadeEfetiva: item.effective_city,
+    logoPath: item.logo_path || undefined,
+    prazoInscricaoFormatado: item.deadline_formatted,
+    prazoInscricaoData: item.deadline_date,
+    type: item.type,
+    normalizedCidadeEfetiva: item.normalized_effective_city || '',
+    maxSalaryNum: Number(item.max_salary_numeric) || 0,
+    minSalaryNum: Number(item.min_salary_numeric) || 0,
+    vacanciesNum: Number(item.vacancies_numeric) || 0,
+    educationLevels: item.education_levels || [],
+    parsedSalary: item.parsed_salary_text,
+    parsedVacancies: item.parsed_vacancies_text,
+    parsedRoles: [], // Not used in UI, providing fallback
+    mentionedStates: item.mentioned_states || [],
+});
 
-const JOB_OPENINGS_COLUMNS = 'title, organization, location, salary_text, education_level_text, link, city, effective_city, logo_url, deadline_text, deadline_formatted, deadline_date, source, type, normalized_effective_city, max_salary_numeric, min_salary_numeric, vacancies_numeric, education_levels, parsed_salary_text, parsed_vacancies_text, parsed_roles, mentioned_states';
-const PREDICTED_ARTICLES_COLUMNS = 'publication_date, title, link, source, mentioned_states';
-
-// --- Tipos para as linhas do banco de dados ---
-interface JobOpeningRow {
-    title: string;
-    organization: string;
-    location: string;
-    salary_text: string;
-    education_level_text: string;
-    link: string;
-    city: string | null;
-    effective_city: string | null;
-    logo_url: string | null;
-    deadline_text: string | null;
-    deadline_formatted: string | null;
-    deadline_date: string | null;
-    source: string;
-    searchable_text: string;
-    type: 'concurso' | 'processo_seletivo';
-    normalized_effective_city: string | null;
-    max_salary_numeric: number | null;
-    min_salary_numeric: number | null;
-    vacancies_numeric: number | null;
-    education_levels: string[] | null;
-    parsed_salary_text: string | null;
-    parsed_vacancies_text: string | null;
-    parsed_roles: string[] | null;
-    mentioned_states: string[] | null;
-}
-
-interface PredictedArticleRow {
-    publication_date: string;
-    title: string;
-    link: string;
-    source: string;
-    normalized_title: string;
-    mentioned_states: string[] | null;
-}
-
-const jobMapper = (item: unknown): ProcessedJob => {
-    const dbRow = item as JobOpeningRow;
+const predictedJobMapper = (item: any): ProcessedPredictedJob => {
+    const [day, month, year] = item.publication_date.split('/').map(Number);
     return {
-        titulo: dbRow.title,
-        orgao: dbRow.organization,
-        localidade: dbRow.location,
-        salario: dbRow.salary_text,
-        escolaridade: dbRow.education_level_text,
-        link: dbRow.link,
-        cidade: dbRow.city || undefined,
-        cidadeEfetiva: dbRow.effective_city,
-        logoUrl: dbRow.logo_url || undefined,
-        prazoInscricao: dbRow.deadline_text || undefined,
-        prazoInscricaoFormatado: dbRow.deadline_formatted,
-        prazoInscricaoData: dbRow.deadline_date,
-        fonte: dbRow.source,
-        type: dbRow.type,
-        normalizedCidadeEfetiva: dbRow.normalized_effective_city || '',
-        maxSalaryNum: Number(dbRow.max_salary_numeric) || 0,
-        minSalaryNum: Number(dbRow.min_salary_numeric) || 0,
-        vacanciesNum: Number(dbRow.vacancies_numeric) || 0,
-        educationLevels: dbRow.education_levels || [],
-        parsedSalary: dbRow.parsed_salary_text,
-        parsedVacancies: dbRow.parsed_vacancies_text,
-        parsedRoles: dbRow.parsed_roles || [],
-        mentionedStates: dbRow.mentioned_states || [],
-    };
-};
-
-const predictedJobMapper = (item: unknown): ProcessedPredictedJob => {
-    const dbRow = item as PredictedArticleRow;
-    const [day, month, year] = dbRow.publication_date.split('/').map(Number);
-    return {
-        date: dbRow.publication_date,
-        title: dbRow.title,
-        link: dbRow.link,
-        source: dbRow.source,
+        date: item.publication_date,
+        title: item.title,
+        link: item.link,
+        source: item.source,
         dateObject: new Date(year, month - 1, day),
-        mentionedStates: dbRow.mentioned_states || [],
+        mentionedStates: item.mentioned_states || [],
     };
 };
 
-/**
- * Fetches all records from a specified Supabase table by paginating through the results
- * in parallel for maximum speed.
- * @param tableName The name of the table to fetch from.
- * @param columns A string of comma-separated column names to select.
- * @returns A promise that resolves to an array of all records.
- */
-async function fetchAllFromTable(tableName: string, columns: string): Promise<unknown[]> {
-    const { count, error: countError } = await supabase
-        .from(tableName)
-        .select(columns, { count: 'exact', head: true });
-
-    if (countError) {
-        console.error(`Error counting rows from ${tableName}:`, countError);
-        throw new Error(`Failed to count rows from ${tableName}: ${countError.message}`);
+function buildBaseJobQuery(criteria: SearchCriteria, signal?: AbortSignal) {
+    let query = supabase.from('job_openings').select(JOB_OPENINGS_LIST_COLUMNS, { count: 'exact' });
+    if (signal) {
+        query = query.abortSignal(signal);
     }
 
-    if (count === null || count === 0) {
-        return [];
+    if (criteria.palavraChave) {
+        query = query.ilike('searchable_text', `%${normalizeText(criteria.palavraChave)}%`);
     }
 
-    const pageCount = Math.ceil(count / PAGE_SIZE);
-    const fetchPromises = [];
-
-    for (let page = 0; page < pageCount; page++) {
-        const from = page * PAGE_SIZE;
-        const to = from + PAGE_SIZE - 1;
-        fetchPromises.push(supabase.from(tableName).select(columns).range(from, to));
+    if (criteria.escolaridade && criteria.escolaridade.length > 0) {
+        // Use the 'ov' (overlaps) operator. The value needs to be a Postgres array literal string: '{value1,value2}'
+        query = query.filter('education_levels', 'ov', `{${criteria.escolaridade.join(',')}}`);
+    }
+    
+    if (criteria.salarioMinimo) {
+        query = query.gte('max_salary_numeric', criteria.salarioMinimo);
     }
 
-    const pageResults = await Promise.all(fetchPromises);
+    if (criteria.vagasMinimas) {
+        query = query.gte('vacancies_numeric', criteria.vagasMinimas);
+    }
+    
+    const isDistanceSearch = criteria.distanciaRaio && criteria.cidadeFiltro && criteria.estado.length === 2;
 
-    const allData: unknown[] = [];
-    for (const result of pageResults) {
-        if (result.error) {
-            console.error(`Error fetching a page from ${tableName}:`, result.error);
-            throw new Error(`Failed to fetch a page from ${tableName}: ${result.error.message}`);
+    if (criteria.estado && criteria.estado !== 'brasil') {
+        if (criteria.estado === 'nacional') {
+            query = query.eq('location', 'Nacional');
+        } else if (criteria.estado.startsWith('regiao-')) {
+            const regionKeyRaw = criteria.estado.replace('regiao-', '');
+            const regionKey = Object.keys(ESTADOS_POR_REGIAO).find(k => k.toLowerCase() === regionKeyRaw);
+            if (regionKey) {
+                const regionStates = ESTADOS_POR_REGIAO[regionKey].map(s => s.sigla);
+                // Use the 'ov' (overlaps) operator. The value needs to be a Postgres array literal string: '{value1,value2}'
+                query = query.filter('mentioned_states', 'ov', `{${regionStates.join(',')}}`);
+            }
+        } else {
+            const targetStates = [criteria.estado.toUpperCase()];
+            if (criteria.incluirVizinhos && VIZINHANCAS_ESTADOS[criteria.estado.toUpperCase()]) {
+                targetStates.push(...VIZINHANCAS_ESTADOS[criteria.estado.toUpperCase()]);
+            }
+            // Use the 'ov' (overlaps) operator. The value needs to be a Postgres array literal string: '{value1,value2}'
+            query = query.filter('mentioned_states', 'ov', `{${targetStates.join(',')}}`);
         }
-        if (result.data) {
-            allData.push(...result.data);
-        }
     }
-    return allData;
+    
+    if (criteria.cidadeFiltro && criteria.estado.length === 2 && !isDistanceSearch) {
+        query = query.eq('normalized_effective_city', normalizeText(criteria.cidadeFiltro));
+    }
+    return query;
 }
 
+export async function fetchJobs(criteria: SearchCriteria, page: number, pageSize: number, type: 'concurso' | 'processo_seletivo' | 'all', signal?: AbortSignal) {
+    const isDistanceSearch = criteria.distanciaRaio && criteria.cidadeFiltro && criteria.estado.length === 2;
+    let query = buildBaseJobQuery(criteria, signal);
+    
+    if (type !== 'all') {
+        query = query.eq('type', type);
+    }
 
-/**
- * A generic function to fetch all data from a table and map it to a specific type.
- * @param tableName The name of the table to fetch data from.
- * @param columns A string of comma-separated column names to select.
- * @param mapper A function to map a raw database item to the desired type.
- * @returns A promise that resolves to an array of mapped items.
- */
-async function fetchAndMapTable<T>(tableName: string, columns: string, mapper: (item: unknown) => T): Promise<T[]> {
-    const rawData = await fetchAllFromTable(tableName, columns);
-    return (rawData || []).map(mapper);
+    const { sort } = criteria;
+    if (sort.startsWith('alpha')) query = query.order('organization', { ascending: sort === 'alpha-asc' });
+    else if (sort.startsWith('salary')) query = query.order('max_salary_numeric', { ascending: sort === 'salary-asc', nullsFirst: false });
+    else if (sort.startsWith('vacancies')) query = query.order('vacancies_numeric', { ascending: sort === 'vacancies-asc', nullsFirst: false });
+    else if (sort.startsWith('deadline')) query = query.order('deadline_date', { ascending: sort === 'deadline-asc', nullsFirst: false });
+    
+    if (!isDistanceSearch) {
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        query = query.range(from, to);
+    }
+
+    const { data, error, count } = await query;
+    if (error) {
+        console.error(`Error fetching jobs (type: ${type}):`, error);
+        throw new Error(`Failed to fetch jobs`);
+    }
+
+    const jobs = (data || []).map(jobMapper);
+    return { jobs, count: count ?? 0 };
 }
 
+export async function fetchJobsSummary(criteria: SearchCriteria, signal?: AbortSignal) {
+    let query = buildBaseJobQuery(criteria, signal);
+    const { data, error, count } = await query;
 
-export async function fetchAllData(): Promise<{ allJobs: ProcessedJob[], allPredictedJobs: ProcessedPredictedJob[], allNews: ProcessedPredictedJob[] }> {
-    try {
-        const [allJobs, allPredictedJobs, allNews] = await Promise.all([
-            fetchAndMapTable('job_openings', JOB_OPENINGS_COLUMNS, jobMapper),
-            fetchAndMapTable('predicted_openings', PREDICTED_ARTICLES_COLUMNS, predictedJobMapper),
-            fetchAndMapTable('news_articles', PREDICTED_ARTICLES_COLUMNS, predictedJobMapper)
-        ]);
-        
-        return { allJobs, allPredictedJobs, allNews };
-    } catch (error) {
-        console.error("Data fetching service error:", error);
-        throw new Error("Não foi possível carregar os dados dos concursos. Isso pode ser um problema temporário. Por favor, tente recarregar a página em alguns instantes.");
+    if (error) {
+        console.error('Error fetching jobs summary:', error);
+        return { totalOpportunities: 0, totalVacancies: 0, highestSalary: 0 };
     }
+
+    const summary = (data || []).reduce(
+        (acc, job) => {
+            acc.totalVacancies += Number(job.vacancies_numeric) || 0;
+            if ((Number(job.max_salary_numeric) || 0) > acc.highestSalary) {
+                acc.highestSalary = Number(job.max_salary_numeric) || 0;
+            }
+            return acc;
+        },
+        { totalVacancies: 0, highestSalary: 0 }
+    );
+
+    return { totalOpportunities: count ?? 0, ...summary };
+}
+
+export async function fetchArticles(table: 'predicted_openings' | 'news_articles', criteria: PredictedCriteria, page: number, pageSize: number, signal?: AbortSignal) {
+    let query = supabase.from(table).select(PREDICTED_ARTICLES_COLUMNS, { count: 'exact' });
+    if (signal) {
+        query = query.abortSignal(signal);
+    }
+
+    const { searchTerm, location, month, year, sources, sort } = criteria;
+
+    if (searchTerm) {
+        query = query.ilike('normalized_title', `%${normalizeText(searchTerm)}%`);
+    }
+
+    if (location !== 'brasil') {
+        if (location.startsWith('regiao-')) {
+            const regionKeyRaw = location.replace('regiao-', '');
+            const regionKey = Object.keys(ESTADOS_POR_REGIAO).find(k => k.toLowerCase() === regionKeyRaw);
+            if (regionKey) {
+                const regionStates = ESTADOS_POR_REGIAO[regionKey].map(s => s.sigla);
+                query = query.filter('mentioned_states', 'ov', regionStates);
+            }
+        } else {
+            // Use .contains() to check if the JSONB array contains the specified state.
+            query = query.contains('mentioned_states', [location.toUpperCase()]);
+        }
+    }
+    
+    // Filtro de data por string matching (dd/mm/yyyy)
+    if (year !== 'todos') {
+        const datePattern = `%/${month !== 'todos' ? String(month).padStart(2, '0') : '%'}/${year}`;
+        query = query.like('publication_date', datePattern);
+    } else if (month !== 'todos') {
+        const datePattern = `%/${String(month).padStart(2, '0')}/%`;
+        query = query.like('publication_date', datePattern);
+    }
+
+    if (sources && sources.length > 0) {
+        query = query.in('source', sources);
+    }
+    
+    // A ordenação por data com uma coluna de texto não é ideal no DB.
+    // Usamos o ID como um proxy razoável para a ordem de inserção.
+    query = query.order('id', { ascending: sort === 'date-asc' });
+
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    query = query.range(from, to);
+
+    const { data, error, count } = await query;
+    if (error) {
+        console.error(`Error fetching articles from ${table}:`, error);
+        throw new Error(`Failed to fetch articles from ${table}`);
+    }
+
+    const items = (data || []).map(predictedJobMapper);
+    
+    // A ordenação final por data real é feita no lado do cliente para a página atual.
+    items.sort((a, b) => {
+        const timeA = a.dateObject.getTime();
+        const timeB = b.dateObject.getTime();
+        return sort === 'date-asc' ? timeA - timeB : timeB - a.dateObject.getTime();
+    });
+
+    return { items, count: count ?? 0 };
 }

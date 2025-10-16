@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { ProcessedPredictedJob, PredictedCriteria } from '../types';
 import { useDebounce } from './useDebounce';
-import { normalizeText } from '../utils/text';
-import { defaultPredictedValues, ESTADOS_POR_REGIAO } from '../constants';
+import { defaultPredictedValues } from '../constants';
+import { fetchArticles } from '../services/scrapingService';
 
 export const calculatePredictedFilters = (criteria: PredictedCriteria): number => {
     let count = 0;
@@ -11,18 +11,23 @@ export const calculatePredictedFilters = (criteria: PredictedCriteria): number =
     if (criteria.month !== 'todos') count++;
     if (criteria.year !== 'todos') count++;
     if (criteria.sources && criteria.sources.length > 0) count++;
+    if (criteria.sort !== defaultPredictedValues.sort) count++;
     return count;
 };
 
 export const useArticleSearch = (
-    items: ProcessedPredictedJob[],
+    table: 'predicted_openings' | 'news_articles',
     defaultFilter: PredictedCriteria | null,
-    isUserDataLoaded: boolean
+    isUserDataLoaded: boolean,
+    page: number,
+    itemsPerPage: number
 ) => {
     const [criteria, setCriteria] = useState<PredictedCriteria>({ ...defaultPredictedValues, ...(defaultFilter || {}) });
     const debouncedCriteria = useDebounce(criteria, 500);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [filteredItems, setFilteredItems] = useState<ProcessedPredictedJob[]>([]);
+    const [totalItems, setTotalItems] = useState(0);
 
     useEffect(() => {
         if (isUserDataLoaded) {
@@ -31,86 +36,39 @@ export const useArticleSearch = (
     }, [defaultFilter, isUserDataLoaded]);
 
     useEffect(() => {
-        if (!items.length) {
-            setFilteredItems([]);
-            return;
-        }
-    
-        setIsLoading(true);
-    
-        // Defer filtering slightly to keep UI responsive
-        const processingTimer = setTimeout(() => {
-            const { searchTerm, location, month, year, sources } = debouncedCriteria;
-    
-            if (
-                !searchTerm &&
-                location === 'brasil' &&
-                month === 'todos' &&
-                year === 'todos' &&
-                (!sources || sources.length === 0)
-            ) {
+        if (!isUserDataLoaded) return;
+        
+        const controller = new AbortController();
+        const fetchData = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const { items, count } = await fetchArticles(table, debouncedCriteria, page, itemsPerPage, controller.signal);
                 setFilteredItems(items);
-            } else {
-                const normalizedSearchTerm = normalizeText(searchTerm);
-    
-                const result = items.filter(item => {
-                    // Location
-                    if (location !== 'brasil') {
-                        if (location.startsWith('regiao-')) {
-                            const regionKeyRaw = location.replace('regiao-', '');
-                            const regionKey = Object.keys(ESTADOS_POR_REGIAO).find(k => k.toLowerCase() === regionKeyRaw);
-                            if (regionKey) {
-                                const regionStates = ESTADOS_POR_REGIAO[regionKey].map(s => s.sigla);
-                                if (!item.mentionedStates.some(s => regionStates.includes(s))) {
-                                    return false;
-                                }
-                            }
-                        } else {
-                            if (!item.mentionedStates.includes(location.toUpperCase())) {
-                                return false;
-                            }
-                        }
-                    }
-    
-                    // Generate normalized title on the fly for searching
-                    const normalizedTitle = normalizeText(item.title);
-
-                    // Search Term
-                    if (normalizedSearchTerm && !normalizedTitle.includes(normalizedSearchTerm)) {
-                        return false;
-                    }
-    
-                    // Date
-                    if (month !== 'todos' && item.dateObject.getMonth() + 1 !== parseInt(month, 10)) {
-                        return false;
-                    }
-                    if (year !== 'todos' && item.dateObject.getFullYear() !== parseInt(year, 10)) {
-                        return false;
-                    }
-    
-                    // Sources
-                    if (sources && sources.length > 0 && (!item.source || !sources.includes(item.source))) {
-                        return false;
-                    }
-                    
-                    return true;
-                });
-                setFilteredItems(result);
+                setTotalItems(count);
+            } catch (err: any) {
+                if (err.name !== 'AbortError') {
+                    const message = table === 'news_articles' ? 'Não foi possível carregar as notícias.' : 'Não foi possível carregar os concursos previstos.';
+                    setError(`${message} Tente novamente mais tarde.`);
+                    console.error(`Error fetching articles from ${table}:`, err);
+                }
+            } finally {
+                setIsLoading(false);
             }
-            
-            setIsLoading(false);
-        }, 10);
-    
-        return () => {
-            clearTimeout(processingTimer);
         };
-    }, [items, debouncedCriteria]);
+
+        fetchData();
+        return () => { controller.abort(); };
+
+    }, [debouncedCriteria, page, itemsPerPage, table, isUserDataLoaded]);
 
     return {
         criteria,
         setCriteria,
         debouncedCriteria,
         filteredItems,
+        totalItems,
         isLoading,
+        error,
     };
 };

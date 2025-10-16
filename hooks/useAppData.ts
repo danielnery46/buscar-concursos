@@ -1,11 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { City, ProcessedJob, ProcessedPredictedJob } from '../types';
-import { fetchAllData } from '../services/scrapingService';
+import { City } from '../types';
 
 export const useAppData = () => {
-    const [processedJobs, setProcessedJobs] = useState<ProcessedJob[]>([]);
-    const [processedPredictedJobs, setProcessedPredictedJobs] = useState<ProcessedPredictedJob[]>([]);
-    const [processedNews, setProcessedNews] = useState<ProcessedPredictedJob[]>([]);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
     const [cityDataCache, setCityDataCache] = useState<Record<string, City[]>>({});
@@ -16,7 +12,7 @@ export const useAppData = () => {
             return Promise.resolve({ [stateUpper]: cityDataCache[stateUpper] });
         }
         try {
-            const res = await fetch(`/data/cities/${stateUpper}.json`);
+            const res = await fetch(`https://mszhxzuwyrclefajafjt.supabase.co/storage/v1/object/public/static-assets/cities/${stateUpper}.json`);
             if (!res.ok) throw new Error(`Failed to load cities for ${stateUpper}`);
             const data = await res.json();
             const newCache = { [stateUpper]: data };
@@ -29,17 +25,17 @@ export const useAppData = () => {
     }, [cityDataCache]);
 
     useEffect(() => {
-        const loadAllData = async () => {
+        const loadInitialCities = async () => {
             setIsInitialLoading(true);
             setInitialLoadError(null);
             try {
-                // Carrega todos os dados de concursos, previstos e notícias. Cidades são carregadas sob demanda.
-                const { allJobs, allPredictedJobs, allNews } = await fetchAllData();
-                
                 // Pré-carrega as cidades mais comuns para uma melhor experiência inicial
                 const commonStates = ['SP', 'MG', 'RJ', 'BA', 'PR'];
                 const cityPromises = commonStates.map(state => 
-                    fetch(`/data/cities/${state}.json`).then(res => res.json()).catch(() => [])
+                    fetch(`https://mszhxzuwyrclefajafjt.supabase.co/storage/v1/object/public/static-assets/cities/${state}.json`).then(res => {
+                        if (!res.ok) throw new Error(`Failed to load cities for ${state}`);
+                        return res.json();
+                    }).catch(() => [])
                 );
                 const citiesData = await Promise.all(cityPromises);
                 const initialCache: Record<string, City[]> = {};
@@ -48,23 +44,16 @@ export const useAppData = () => {
                 });
                 setCityDataCache(initialCache);
 
-                setProcessedJobs(allJobs);
-                setProcessedPredictedJobs(allPredictedJobs.sort((a, b) => b.dateObject.getTime() - a.dateObject.getTime()));
-                setProcessedNews(allNews.sort((a, b) => b.dateObject.getTime() - a.dateObject.getTime()));
-
             } catch (err) {
                 setInitialLoadError(err instanceof Error ? err.message : 'Ocorreu um erro desconhecido.');
             } finally {
                 setIsInitialLoading(false);
             }
         };
-        loadAllData();
+        loadInitialCities();
     }, []);
 
     return {
-        processedJobs,
-        processedPredictedJobs,
-        processedNews,
         isInitialLoading,
         initialLoadError,
         cityDataCache,

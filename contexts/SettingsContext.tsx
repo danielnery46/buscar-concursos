@@ -3,7 +3,17 @@ import type { Theme, AccessibilitySettings } from '../types';
 import { useAuth } from './AuthContext';
 import { supabase } from '../utils/supabase';
 import { useDebounce } from '../hooks/useDebounce';
-import { THEME_KEY, ACCESSIBILITY_SETTINGS_KEY } from '../constants';
+import { 
+    THEME_KEY, 
+    ACCESSIBILITY_SETTINGS_KEY,
+    ROTA_CIDADE_KEY, 
+    FAVORITE_SEARCHES_KEY, 
+    FAVORITE_PREDICTED_FILTERS_KEY, 
+    FAVORITE_NEWS_FILTERS_KEY,
+    DEFAULT_SEARCH_KEY, 
+    DEFAULT_PREDICTED_FILTER_KEY, 
+    DEFAULT_NEWS_FILTER_KEY
+} from '../constants';
 
 interface SettingsContextType {
   theme: Theme;
@@ -14,7 +24,12 @@ interface SettingsContextType {
 }
 
 const defaultSettings: AccessibilitySettings = { highContrast: false, largerText: false, reduceMotion: false, uiScale: 100, openLinksInModal: true, showQuickAccess: true, dyslexicFont: false, highlightLinks: false, textSpacing: false, grayscale: false };
-
+const getLocalItem = (key: string, defaultValue: any) => {
+    try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : defaultValue;
+    } catch { return defaultValue; }
+};
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 interface SettingsProviderProps {
@@ -36,16 +51,46 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
     const loadInitialSettings = async () => {
         if (authLoading) return;
 
+        // This check must be identical to the one in UserDataContext to prevent deadlocks.
+        const isDifferent = (key: string, defaultValue: any) => {
+            const item = localStorage.getItem(key);
+            if (item === null) return false;
+            try {
+                const localValue = JSON.parse(item);
+                return JSON.stringify(localValue) !== JSON.stringify(defaultValue);
+            } catch (e) {
+                if (key === THEME_KEY) {
+                    return item !== defaultValue;
+                }
+                return true; // Assume modified if parsing fails
+            }
+        };
+
+        const anyLocalDataIsModified = () => {
+            if (isDifferent(ROTA_CIDADE_KEY, '')) return true;
+            if (isDifferent(FAVORITE_SEARCHES_KEY, [])) return true;
+            if (isDifferent(FAVORITE_PREDICTED_FILTERS_KEY, [])) return true;
+            if (isDifferent(FAVORITE_NEWS_FILTERS_KEY, [])) return true;
+            if (isDifferent(DEFAULT_SEARCH_KEY, null)) return true;
+            if (isDifferent(DEFAULT_PREDICTED_FILTER_KEY, null)) return true;
+            if (isDifferent(DEFAULT_NEWS_FILTER_KEY, null)) return true;
+            if (isDifferent(THEME_KEY, 'auto')) return true;
+            if (isDifferent(ACCESSIBILITY_SETTINGS_KEY, defaultSettings)) return true;
+            return false;
+        };
+
+        if (user && anyLocalDataIsModified()) {
+            console.log("SettingsContext: User logged in with modified local data. Awaiting migration decision.");
+            // Don't load anything yet. Wait for the migrationDecision event from UserDataContext.
+            return;
+        }
+
         if (user) {
             const { data, error } = await supabase.from('user_data').select('theme, accessibility_settings').eq('id', user.id).single();
             if (error && error.code !== 'PGRST116') console.error('Error fetching settings:', error);
             
-            const localSettings = JSON.parse(localStorage.getItem(ACCESSIBILITY_SETTINGS_KEY) || 'null') || defaultSettings;
-            const cloudSettings = data?.accessibility_settings || {};
-            
-            _setTheme(data?.theme || localStorage.getItem(THEME_KEY) as Theme || 'auto');
-            setAccessibilitySettings({ ...defaultSettings, ...localSettings, ...cloudSettings });
-
+            _setTheme(data?.theme || 'auto');
+            setAccessibilitySettings(data?.accessibility_settings || defaultSettings);
         } else {
             _setTheme(localStorage.getItem(THEME_KEY) as Theme || 'auto');
             setAccessibilitySettings(JSON.parse(localStorage.getItem(ACCESSIBILITY_SETTINGS_KEY) || 'null') || defaultSettings);
@@ -55,6 +100,46 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
 
     loadInitialSettings();
   }, [user, authLoading]);
+
+  // Event listener for migration decision
+  useEffect(() => {
+    const handleMigrationDecision = async (event: Event) => {
+        const { action } = (event as CustomEvent).detail;
+        console.log(`SettingsContext received migration decision: ${action}`);
+        const settingsKeys = [THEME_KEY, ACCESSIBILITY_SETTINGS_KEY];
+        
+        if (!user) { // Safeguard
+            settingsKeys.forEach(key => localStorage.removeItem(key));
+            setIsSettingsLoaded(true);
+            return;
+        }
+
+        const { data: cloudData } = await supabase.from('user_data').select('theme, accessibility_settings').eq('id', user.id).single();
+
+        if (action === 'migrate') {
+            const localTheme = localStorage.getItem(THEME_KEY) as Theme | null;
+            const localSettings = getLocalItem(ACCESSIBILITY_SETTINGS_KEY, null);
+
+            // Merge with local data taking precedence for settings.
+            const mergedTheme = localTheme && localTheme !== 'auto' ? localTheme : (cloudData?.theme || 'auto');
+            const mergedSettings = { ...defaultSettings, ...(cloudData?.accessibility_settings || {}), ...(localSettings || {}) };
+            
+            _setTheme(mergedTheme);
+            setAccessibilitySettings(mergedSettings);
+        } else { // discard
+            _setTheme(cloudData?.theme || 'auto');
+            setAccessibilitySettings(cloudData?.accessibility_settings || defaultSettings);
+        }
+        
+        settingsKeys.forEach(key => localStorage.removeItem(key));
+        setIsSettingsLoaded(true);
+    };
+
+    window.addEventListener('migrationDecision', handleMigrationDecision);
+    return () => {
+        window.removeEventListener('migrationDecision', handleMigrationDecision);
+    };
+}, [user]);
 
   // Debounced save for Theme
   useEffect(() => {

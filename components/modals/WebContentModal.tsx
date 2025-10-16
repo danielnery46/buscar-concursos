@@ -60,15 +60,31 @@ export function WebContentModal({ isOpen, onClose, url, title }: WebContentModal
         onClose();
     }, [onClose]);
 
-    const handleCopy = async () => {
+    const handleShare = useCallback(async () => {
         if (!url) return;
         setCopied(false);
-        const success = await copyToClipboard(url);
-        if (success) {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2500);
+
+        const shareData = {
+            title: title || document.title,
+            text: `Confira este link: ${title || ''}`,
+            url: url,
+        };
+
+        try {
+            if (navigator.share) {
+                await navigator.share(shareData);
+            } else {
+                throw new Error('Web Share API not available.');
+            }
+        } catch (error) {
+            console.log('Falha ao compartilhar, usando copiar para a área de transferência:', error);
+            const success = await copyToClipboard(url);
+            if (success) {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2500);
+            }
         }
-    };
+    }, [url, title]);
     
     if (!isRendered) return null;
 
@@ -87,7 +103,7 @@ export function WebContentModal({ isOpen, onClose, url, title }: WebContentModal
                     </a>}
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" onClick={handleCopy} aria-label="Compartilhar">
+                    <Button variant="ghost" size="icon" onClick={handleShare} aria-label="Compartilhar">
                          {copied ? <CheckIcon className="h-6 w-6 text-emerald-500" /> : <ShareIcon className="h-6 w-6 text-gray-600 dark:text-gray-300" />}
                     </Button>
                     <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800/80 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" aria-label="Abrir em nova aba">

@@ -1,3 +1,5 @@
+import type { ProcessedJob, OpenJobsSortOption } from '../types';
+
 /**
  * Combina nomes de classe condicionalmente. Alternativa leve ao 'clsx'.
  * @param {...(string | boolean | null | undefined)[]} classes - As classes a serem combinadas.
@@ -51,4 +53,54 @@ export function prefetchUrl(url: string) {
     document.head.appendChild(link);
     // Let the browser manage the lifecycle of the prefetch link.
     // Removing it prematurely might cancel the prefetch.
+}
+
+/**
+ * Sorts an array of job objects based on a specified sort option.
+ * @param jobs The array of jobs to sort.
+ * @param sort The sorting option.
+ * @returns A new array with the sorted jobs.
+ */
+export function sortJobs(jobs: ProcessedJob[], sort: OpenJobsSortOption): ProcessedJob[] {
+    const sortedJobs = [...jobs];
+
+    sortedJobs.sort((a, b) => {
+        switch (sort) {
+            case 'alpha-asc':
+                return a.orgao.localeCompare(b.orgao);
+            case 'alpha-desc':
+                return b.orgao.localeCompare(a.orgao);
+            case 'deadline-asc':
+                if (!a.prazoInscricaoData) return 1;
+                if (!b.prazoInscricaoData) return -1;
+                return new Date(a.prazoInscricaoData).getTime() - new Date(b.prazoInscricaoData).getTime();
+            case 'deadline-desc':
+                if (!a.prazoInscricaoData) return 1;
+                if (!b.prazoInscricaoData) return -1;
+                return new Date(b.prazoInscricaoData).getTime() - new Date(a.prazoInscricaoData).getTime();
+            case 'salary-desc':
+                return (b.maxSalaryNum || 0) - (a.maxSalaryNum || 0);
+            case 'salary-asc':
+                const salA = a.maxSalaryNum || Number.POSITIVE_INFINITY;
+                const salB = b.maxSalaryNum || Number.POSITIVE_INFINITY;
+                if (salA === salB) return 0;
+                return salA - salB;
+            case 'vacancies-desc':
+                return (b.vacanciesNum || 0) - (a.vacanciesNum || 0);
+            case 'vacancies-asc':
+                return (a.vacanciesNum || 0) - (b.vacanciesNum || 0);
+            case 'distance-asc':
+                if (a.distance === undefined || a.distance === null) return 1;
+                if (b.distance === undefined || b.distance === null) return -1;
+                return a.distance - b.distance;
+            case 'distance-desc':
+                if (a.distance === undefined || a.distance === null) return 1;
+                if (b.distance === undefined || b.distance === null) return -1;
+                return b.distance - a.distance;
+            default:
+                return 0;
+        }
+    });
+
+    return sortedJobs;
 }

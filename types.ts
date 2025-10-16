@@ -24,7 +24,7 @@ export interface Job {
   link: string;
   cidade?: string;
   cidadeEfetiva?: string | null;
-  logoUrl?: string;
+  logoPath?: string;
   prazoInscricao?: string;
   fonte?: string;
 }
@@ -73,6 +73,7 @@ export interface SearchCriteria extends SavedItem {
   palavraChave: string;
   incluirVizinhos: boolean;
   distanciaRaio: number | '';
+  sort: OpenJobsSortOption;
 }
 
 export interface PredictedCriteria extends SavedItem {
@@ -81,6 +82,7 @@ export interface PredictedCriteria extends SavedItem {
   month: string;
   year: string;
   sources: string[];
+  sort: ArticleSortOption;
 }
 
 export interface City {
@@ -140,6 +142,8 @@ export type OpenJobsSortOption =
     | 'salary-desc' 
     | 'salary-asc' 
     | 'vacancies-desc' 
-    | 'vacancies-asc';
+    | 'vacancies-asc'
+    | 'distance-asc'
+    | 'distance-desc';
 
 export type ArticleSortOption = 'date-desc' | 'date-asc';

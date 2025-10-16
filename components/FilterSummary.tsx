@@ -28,13 +28,8 @@ export const FilterSummary = memo(function FilterSummary({ totalOpportunities, t
         <div className="bg-white dark:bg-gray-900 p-3 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
             <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">Resumo da Busca</h2>
             {isLoading ? (
-                <div className="mt-1 space-y-1 animate-pulse">
-                    {[...Array(3)].map((_, i) => (
-                        <div key={i} className="flex justify-between items-center py-2">
-                            <div className="h-5 bg-gray-200 dark:bg-gray-700/80 rounded w-2/3"></div>
-                            <div className="h-5 bg-gray-200 dark:bg-gray-700/80 rounded w-1/4"></div>
-                        </div>
-                    ))}
+                <div className="mt-1 flex justify-center items-center py-6">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
                 </div>
             ) : (
                 <div className="mt-1 divide-y divide-gray-100 dark:divide-gray-800/50">

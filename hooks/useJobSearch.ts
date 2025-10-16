@@ -1,10 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
-import { City, ProcessedJob, SearchCriteria, SummaryData, OpenJobsSortOption } from '../types';
+import { useState, useEffect } from 'react';
+import { City, ProcessedJob, SearchCriteria, SummaryData } from '../types';
 import { useDebounce } from './useDebounce';
+// FIX: Import geo and text utilities from their dedicated modules and sortJobs from helpers.
+import { sortJobs } from '../utils/helpers';
+import { processJobData, haversineDistance } from '../utils/geo';
 import { normalizeText } from '../utils/text';
-import { haversineDistance, processJobData } from '../utils/geo';
-import { systemDefaultValues, VIZINHANCAS_ESTADOS, ESTADOS_POR_REGIAO } from '../constants';
-
+import { systemDefaultValues } from '../constants';
+import { fetchJobs, fetchJobsSummary } from '../services/scrapingService';
 
 export const calculateActiveFilters = (criteria: SearchCriteria): number => {
     let count = 0;
@@ -17,207 +19,127 @@ export const calculateActiveFilters = (criteria: SearchCriteria): number => {
     if (criteria.vagasMinimas) count++;
     if (criteria.incluirVizinhos && isStateSelected) count++;
     if (criteria.distanciaRaio && criteria.cidadeFiltro && isStateSelected) count++;
+    if (criteria.sort !== systemDefaultValues.sort) count++;
     return count;
 };
 
-export const sortJobs = (jobs: ProcessedJob[], sortOption: OpenJobsSortOption): ProcessedJob[] => {
-    const sorted = [...jobs];
-    switch (sortOption) {
-        case 'alpha-asc':
-            return sorted.sort((a, b) => a.orgao.localeCompare(b.orgao, 'pt-BR', { sensitivity: 'base' }));
-        case 'alpha-desc':
-            return sorted.sort((a, b) => b.orgao.localeCompare(a.orgao, 'pt-BR', { sensitivity: 'base' }));
-        case 'salary-desc':
-            return sorted.sort((a, b) => b.maxSalaryNum - a.maxSalaryNum);
-        case 'salary-asc':
-            return sorted.sort((a, b) => a.maxSalaryNum - b.maxSalaryNum);
-        case 'vacancies-desc':
-            return sorted.sort((a, b) => b.vacanciesNum - a.vacanciesNum);
-        case 'vacancies-asc':
-            return sorted.sort((a, b) => a.vacanciesNum - b.vacanciesNum);
-        case 'deadline-asc':
-            return sorted.sort((a, b) => {
-                const dateA = a.prazoInscricaoData;
-                const dateB = b.prazoInscricaoData;
-                if (!dateA && !dateB) return 0;
-                if (!dateA) return 1;
-                if (!dateB) return -1;
-                return new Date(dateA).getTime() - new Date(dateB).getTime();
-            });
-        case 'deadline-desc':
-                return sorted.sort((a, b) => {
-                const dateA = a.prazoInscricaoData;
-                const dateB = b.prazoInscricaoData;
-                if (!dateA && !dateB) return 0;
-                if (!dateA) return 1;
-                if (!dateB) return -1;
-                // FIX: Corrected a typo where the entire job object `a` was passed to `new Date()` instead of the date string `dateA`.
-                return new Date(dateB).getTime() - new Date(dateA).getTime();
-            });
-        default:
-            return sorted;
-    }
-};
-
 export const useJobSearch = (
-    jobs: ProcessedJob[],
     cityDataCache: Record<string, City[]>,
     defaultSearch: SearchCriteria | null,
-    isUserDataLoaded: boolean
+    isUserDataLoaded: boolean,
+    concursosPage: number,
+    processosPage: number,
+    itemsPerPage: number
 ) => {
     const [criteria, setCriteria] = useState<SearchCriteria>({ ...systemDefaultValues, ...(defaultSearch || {}) });
     const debouncedCriteria = useDebounce(criteria, 500);
     const [isLoading, setIsLoading] = useState(true);
-    const [filteredJobs, setFilteredJobs] = useState<ProcessedJob[]>([]);
+    const [error, setError] = useState<string | null>(null);
+
+    const [concursos, setConcursos] = useState<ProcessedJob[]>([]);
+    const [totalConcursos, setTotalConcursos] = useState(0);
+    const [processosSeletivos, setProcessosSeletivos] = useState<ProcessedJob[]>([]);
+    const [totalProcessos, setTotalProcessos] = useState(0);
+    const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
 
     useEffect(() => {
         if (isUserDataLoaded) {
             setCriteria({ ...systemDefaultValues, ...(defaultSearch || {}) });
         }
     }, [defaultSearch, isUserDataLoaded]);
-
-    useEffect(() => {
-        if (!jobs.length) {
-            setFilteredJobs([]);
-            return;
-        }
-
-        setIsLoading(true);
-
-        const processingTimer = setTimeout(() => {
-            const allCitiesMap = new Map<string, City>();
-            Object.entries(cityDataCache).forEach(([state, cities]) => {
-                if (Array.isArray(cities)) {
-                    cities.forEach(city => {
-                        const key = `${city.normalizedName}-${state.toLowerCase()}`;
-                        if (!allCitiesMap.has(key)) allCitiesMap.set(key, city);
-                    });
-                }
-            });
-
-            const jobsWithGeo = jobs.map(job => processJobData(job, allCitiesMap));
-            
-            const {
-                estado, cidadeFiltro, escolaridade, salarioMinimo, vagasMinimas,
-                palavraChave, incluirVizinhos, distanciaRaio
-            } = debouncedCriteria;
-
-            const normalizedKeyword = normalizeText(palavraChave);
-            const selectedCityData = (cidadeFiltro && estado.length === 2 && cityDataCache[estado.toUpperCase()])
-                ? cityDataCache[estado.toUpperCase()].find(c => c.name === cidadeFiltro)
-                : null;
-
-            const filteredResult = jobsWithGeo.filter(job => {
-                // Generate searchable text on the fly
-                const searchableText = normalizeText(`${job.orgao} ${job.titulo} ${job.localidade} ${job.escolaridade}`);
-
-                // Estado/Região
-                if (estado !== 'brasil') {
-                    if (estado === 'nacional') {
-                        if (job.localidade.toUpperCase() !== 'NACIONAL') return false;
-                    } else if (estado.startsWith('regiao-')) {
-                        const regionKeyRaw = estado.replace('regiao-', '');
-                        const regionKey = Object.keys(ESTADOS_POR_REGIAO).find(k => k.toLowerCase() === regionKeyRaw);
-                        if(regionKey) {
-                            const regionStates = ESTADOS_POR_REGIAO[regionKey].map(s => s.sigla);
-                            if (!job.mentionedStates?.some(s => regionStates.includes(s))) return false;
-                        }
-                    } else { // State is selected
-                        const targetStates = new Set([estado.toUpperCase()]);
-                        if (incluirVizinhos && VIZINHANCAS_ESTADOS[estado.toUpperCase()]) {
-                            VIZINHANCAS_ESTADOS[estado.toUpperCase()].forEach(s => targetStates.add(s));
-                        }
-                        if (!job.mentionedStates?.some(s => targetStates.has(s))) return false;
-                    }
-                }
-
-                // Cidade
-                if (cidadeFiltro && estado.length === 2) {
-                    const isRadiusSearch = distanciaRaio && selectedCityData;
-                    
-                    if (isRadiusSearch) {
-                        if (job.lat && job.lon) {
-                            const distance = haversineDistance(selectedCityData!.lat, selectedCityData!.lon, job.lat, job.lon);
-                            job.distance = distance;
-                            if (distance > distanciaRaio) {
-                                return false;
-                            }
-                        } else {
-                            if (normalizeText(job.cidadeEfetiva) === normalizeText(cidadeFiltro)) {
-                                 job.distance = 0;
-                            } else {
-                                 return false;
-                            }
-                        }
-                    } else {
-                        job.distance = undefined;
-                        if (normalizeText(job.cidadeEfetiva) !== normalizeText(cidadeFiltro)) {
-                            return false;
-                        }
-                    }
-                } else {
-                    job.distance = undefined;
-                }
-
-
-                // Keyword
-                if (normalizedKeyword && !searchableText.includes(normalizedKeyword)) return false;
-
-                // Salario
-                if (salarioMinimo && job.maxSalaryNum < salarioMinimo) return false;
-
-                // Vagas
-                if (vagasMinimas && job.vacanciesNum < vagasMinimas) return false;
-
-                // Escolaridade
-                if (escolaridade.length > 0 && !escolaridade.some(level => job.educationLevels.includes(level))) return false;
-
-                return true;
-            });
-            
-            setFilteredJobs(filteredResult);
-            setIsLoading(false);
-        }, 10);
-
-        return () => {
-            clearTimeout(processingTimer);
-        };
-    }, [debouncedCriteria, jobs, cityDataCache]);
     
-    const { concursos, processosSeletivos, summaryData } = useMemo(() => {
-        const concursos: ProcessedJob[] = [];
-        const processosSeletivos: ProcessedJob[] = [];
-        let totalVacancies = 0;
-        let highestSalary = 0;
+    useEffect(() => {
+        if (!isUserDataLoaded) return;
 
-        filteredJobs.forEach(job => {
-            if (job.type === 'concurso') {
-                concursos.push(job);
-            } else {
-                processosSeletivos.push(job);
-            }
-            totalVacancies += job.vacanciesNum || 0;
-            if (job.maxSalaryNum > highestSalary) {
-                highestSalary = job.maxSalaryNum;
-            }
-        });
+        const controller = new AbortController();
+        const fetchData = async () => {
+            setIsLoading(true);
+            setError(null);
+            
+            try {
+                const { distanciaRaio, cidadeFiltro, estado, sort } = debouncedCriteria;
+                const isDistanceSearch = !!(distanciaRaio && cidadeFiltro && estado.length === 2);
 
-        const summaryData: SummaryData = {
-            totalOpportunities: filteredJobs.length,
-            totalVacancies,
-            highestSalary
+                if (isDistanceSearch) {
+                    const selectedCityData = cityDataCache[estado.toUpperCase()]?.find(c => c.name === cidadeFiltro);
+                    if (!selectedCityData) {
+                        setConcursos([]); setTotalConcursos(0);
+                        setProcessosSeletivos([]); setTotalProcessos(0);
+                        setSummaryData({ totalOpportunities: 0, totalVacancies: 0, highestSalary: 0 });
+                        setIsLoading(false);
+                        return;
+                    };
+                    
+                    const { jobs: allStateJobs } = await fetchJobs(debouncedCriteria, 1, 9999, 'all', controller.signal);
+
+                    const allCitiesMap = new Map<string, City>();
+                    Object.entries(cityDataCache).forEach(([st, cities]) => {
+                        if (Array.isArray(cities)) cities.forEach(city => {
+                            allCitiesMap.set(`${normalizeText(city.name)}-${st.toLowerCase()}`, city);
+                        });
+                    });
+
+                    const jobsWithGeo = allStateJobs.map(job => processJobData(job, allCitiesMap));
+                    const jobsInRadius = jobsWithGeo.map(job => {
+                        const distance = (job.lat && job.lon) ? haversineDistance(selectedCityData.lat, selectedCityData.lon, job.lat, job.lon) : undefined;
+                        return { ...job, distance };
+                    }).filter(job => job.distance !== undefined && job.distance <= distanciaRaio);
+
+                    const sortedJobs = sortJobs(jobsInRadius, sort);
+
+                    const finalConcursos = sortedJobs.filter(j => j.type === 'concurso');
+                    const finalProcessos = sortedJobs.filter(j => j.type === 'processo_seletivo');
+
+                    setConcursos(finalConcursos.slice((concursosPage - 1) * itemsPerPage, concursosPage * itemsPerPage));
+                    setTotalConcursos(finalConcursos.length);
+                    setProcessosSeletivos(finalProcessos.slice((processosPage - 1) * itemsPerPage, processosPage * itemsPerPage));
+                    setTotalProcessos(finalProcessos.length);
+                    
+                    const summary = sortedJobs.reduce((acc, job) => {
+                        acc.totalVacancies += job.vacanciesNum || 0;
+                        if(job.maxSalaryNum > acc.highestSalary) acc.highestSalary = job.maxSalaryNum;
+                        return acc;
+                    }, { totalVacancies: 0, highestSalary: 0 });
+                    setSummaryData({ totalOpportunities: sortedJobs.length, ...summary });
+                    
+                } else {
+                    const [summaryResult, concursosResult, processosResult] = await Promise.all([
+                        fetchJobsSummary(debouncedCriteria, controller.signal),
+                        fetchJobs(debouncedCriteria, concursosPage, itemsPerPage, 'concurso', controller.signal),
+                        fetchJobs(debouncedCriteria, processosPage, itemsPerPage, 'processo_seletivo', controller.signal),
+                    ]);
+
+                    setConcursos(concursosResult.jobs);
+                    setTotalConcursos(concursosResult.count);
+                    setProcessosSeletivos(processosResult.jobs);
+                    setTotalProcessos(processosResult.count);
+                    setSummaryData(summaryResult);
+                }
+
+            } catch (err: any) {
+                if (err.name !== 'AbortError') {
+                    setError("Não foi possível carregar os concursos. Tente novamente mais tarde.");
+                    console.error("Error fetching job data:", err);
+                }
+            } finally {
+                setIsLoading(false);
+            }
         };
 
-        return { concursos, processosSeletivos, summaryData };
-    }, [filteredJobs]);
+        fetchData();
+        return () => { controller.abort(); };
+    }, [debouncedCriteria, isUserDataLoaded, cityDataCache, concursosPage, processosPage, itemsPerPage]);
 
     return {
         criteria,
         setCriteria,
         debouncedCriteria,
         concursos,
+        totalConcursos,
         processosSeletivos,
+        totalProcessos,
         summaryData,
-        isLoading
+        isLoading,
+        error,
     };
 };

@@ -17,7 +17,7 @@
 // Esta função faz o scraping de vagas de concursos.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { DOMParser, Element } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Declara Deno para resolver erros de TypeScript em ambientes não-Deno.
 declare const Deno: any;
@@ -106,48 +106,30 @@ function titleCase(str: string): string {
 }
 
 function extractEffectiveCity(orgao: string, titulo: string, localidade: string): string | null {
-    // 1. Função interna para limpar e validar um nome de cidade potencial.
     const cleanAndValidate = (text: string | undefined): string | null => {
         if (!text) return null;
-        
         let cleaned = text.trim();
-        
-        // Remove sufixos de estado (ex: "- SP", "/SC").
         cleaned = cleaned.replace(/(\s*[-\/,(]\s*[A-Z]{2})$/, '').trim();
-        // Remove pontuação no final.
         cleaned = cleaned.replace(/[.,;]$/, '').trim();
-        // Remove frases de ação comuns que não fazem parte do nome.
         cleaned = cleaned.replace(/\s+(?:abre|divulga|anuncia|promove|realiza|publica|retifica|comunica|informa)\s+.*$/i, '').trim();
-
-        // Lista de palavras genéricas a serem ignoradas.
         const genericWords = /^(municipal|estadual|federal|do estado|gerais|vários cargos|diversos cargos|de|da|do|para|o|a|e|municipal de)$/i;
         if (genericWords.test(cleaned)) return null;
-
-        // Validação final de sanidade.
         if (cleaned.length < 3 || cleaned.split(' ').length > 5) return null;
-        
         return titleCase(cleaned);
     };
-
-    // 2. Ordem de prioridade para buscar a cidade.
     const textsToSearch = [titulo, orgao];
-
     for (const text of textsToSearch) {
         if (!text) continue;
-
-        // Padrão: "Prefeitura de [Cidade]"
         let match = text.match(/^(?:Prefeitura|Câmara|SAAE)\s+(?:Municipal\s+)?(?:de|da|do|da Estância Turística de)\s+([^-\/,(]+)/i);
         if (match && match[1]) {
             const city = cleanAndValidate(match[1]);
             if (city) return city;
         }
-        // Padrão: "[Órgão] - [Cidade]"
         match = text.match(/-\s+([A-ZÀ-ÿ\s'-]+)$/);
         if (match && match[1]) {
             const city = cleanAndValidate(match[1]);
             if (city) return city;
         }
-        // Padrão no título: "... em [Cidade]"
         if (text === titulo) {
             match = text.match(/\s+em\s+([A-ZÀ-ÿ\s'-]+?)(?:\s*[-\/,(]|\s+com\s+|$)/i);
             if (match && match[1]) {
@@ -156,20 +138,15 @@ function extractEffectiveCity(orgao: string, titulo: string, localidade: string)
             }
         }
     }
-    
-    // 3. Fallbacks
-    // Fallback: Tenta extrair de "Prefeitura [Cidade]"
     const match = orgao.match(/^(?:Prefeitura|Câmara)\s+(?:Municipal\s+)?(.+)/i);
     if (match && match[1]) {
         const city = cleanAndValidate(match[1]);
         if (city) return city;
     }
-    // Fallback: Usa o campo 'localidade' se não for apenas uma sigla de estado.
     if (localidade && localidade.trim().length > 2 && !/^[A-Z]{2}$/i.test(localidade.trim())) {
         const city = cleanAndValidate(localidade.split(/[\/-]/)[0]);
         if (city) return city;
     }
-
     return null;
 }
 
@@ -177,7 +154,6 @@ function formatSalaryString(salaryText: string | null): string | null {
     if (!salaryText || !/\d/.test(salaryText) || !salaryText.toLowerCase().includes('r$')) {
         return salaryText;
     }
-
     return salaryText.replace(/([\d\.,]+)/g, (match) => {
         const number = parseFloat(match.replace(/\./g, '').replace(',', '.'));
         if (isNaN(number) || number < 100) {
@@ -194,33 +170,23 @@ function parseSalaryAndVacancies(text: string | undefined): { vacancies: string 
     if (!text || text.toLowerCase().includes('não informado')) {
         return { vacancies: null, salary: 'Não informado' };
     }
-
     let salaryText = text;
     const foundVacancies: string[] = [];
-
-    // Regex to find both numeric vacancies and "CR"
     const vacancyRegex = /(\b(?:cr|cadastro de reserva)\b)|([\d\.]+)\s+vagas?/ig;
-    
-    // Store matches to avoid issues with modifying the string during iteration
     const matches = Array.from(salaryText.matchAll(vacancyRegex));
-
     matches.forEach(match => {
         const fullMatch = match[0];
-        if (match[1]) { // Matched CR
+        if (match[1]) {
             if (!foundVacancies.includes('Cadastro Reserva')) {
                 foundVacancies.push('Cadastro Reserva');
             }
-        } else if (match[2]) { // Matched numeric vagas
+        } else if (match[2]) {
             foundVacancies.push(fullMatch.trim());
         }
-        // Replace matched part in the original string
         salaryText = salaryText.replace(fullMatch, '');
     });
-    
     const vacancies = foundVacancies.length > 0 ? foundVacancies.join(' + ') : null;
-
     let finalSalary = salaryText.replace(/^[/\s•,-]+|[/\s•,-]+$/g, '').trim();
-
     if (/^vagas?$/i.test(finalSalary) || finalSalary === '') {
         finalSalary = 'Não informado';
     } else if (/\ba combinar\b/i.test(finalSalary)) {
@@ -233,9 +199,7 @@ function parseSalaryAndVacancies(text: string | undefined): { vacancies: string 
             finalSalary = `Até R$ ${finalSalary}`;
         }
     }
-
     const formattedSalary = formatSalaryString(finalSalary);
-
     return {
         vacancies: vacancies ? `${vacancies.charAt(0).toUpperCase()}${vacancies.slice(1)}` : null,
         salary: (formattedSalary !== 'Não informado' && formattedSalary) ? formattedSalary : null
@@ -292,12 +256,9 @@ function parseMinSalary(text: string | undefined): number {
 }
 function parseNumericVacancies(text: string | undefined): number {
   if (!text) return 0;
-  // Use 'g' flag to find all matches
   const matches = text.match(/([\d\.]+)\s+vagas?/ig);
   if (!matches) return 0;
-
   return matches.reduce((sum, match) => {
-    // Extract the numeric part from each match
     const numMatch = match.match(/([\d\.]+)/);
     if (numMatch && numMatch[1]) {
         const numberString = numMatch[1].replace(/\./g, '');
@@ -307,35 +268,23 @@ function parseNumericVacancies(text: string | undefined): number {
   }, 0);
 }
 
-/**
- * Analisa o texto do prazo de inscrição para extrair datas e formatar uma string de exibição.
- * @param text O texto bruto do prazo, ex: "de 10/08/2024 a 20/09/2024" ou "Verificar edital28/10/2025".
- * @returns Um objeto contendo a data final para ordenação (ISO string) e o prazo formatado para exibição.
- */
 function parseDeadlineInfo(text: string | null | undefined): { dateForSort: string | null; formatted: string | null } {
     if (!text) {
         return { dateForSort: null, formatted: null };
     }
-
-    // Adiciona um espaço se houver uma palavra seguida por uma data sem espaço.
     const spacedText = text.replace(/([a-zA-Zá-úÁ-Ú])(\d{1,2}\/\d{1,2})/g, '$1 $2');
     const lowerText = spacedText.toLowerCase();
-
-    // Extrai todas as datas válidas do texto
     const dateRegex = /(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/g;
     const dates: Date[] = [];
     const currentYear = new Date().getFullYear();
-
     let match;
     while ((match = dateRegex.exec(lowerText)) !== null) {
         const day = parseInt(match[1], 10);
         const month = parseInt(match[2], 10);
         let year = match[3] ? parseInt(match[3], 10) : currentYear;
-
         if (year < 100) {
             year += 2000;
         }
-
         if (day > 0 && day <= 31 && month > 0 && month <= 12) {
             const dateObj = new Date(Date.UTC(year, month - 1, day));
             if (dateObj.getUTCMonth() === month - 1) {
@@ -343,42 +292,28 @@ function parseDeadlineInfo(text: string | null | undefined): { dateForSort: stri
             }
         }
     }
-
-    // Se nenhuma data foi encontrada, retorna o texto original (com espaço corrigido).
     if (dates.length === 0) {
         return { dateForSort: null, formatted: spacedText.charAt(0).toUpperCase() + spacedText.slice(1) };
     }
-
     dates.sort((a, b) => a.getTime() - b.getTime());
-    
     const formatDate = (date: Date) => {
         const day = String(date.getUTCDate()).padStart(2, '0');
         const month = String(date.getUTCMonth() + 1).padStart(2, '0');
         const year = date.getUTCFullYear();
         return `${day}/${month}/${year}`;
     };
-
     const firstDateStr = formatDate(dates[0]);
     const lastDate = dates[dates.length - 1];
     const lastDateStr = formatDate(lastDate);
-
     let datePart: string;
     if (dates.length > 1 && firstDateStr !== lastDateStr) {
         datePart = `De ${firstDateStr} a ${lastDateStr}`;
     } else {
         datePart = `Até ${lastDateStr}`;
     }
-
-    // Extrai o texto que não é data para usar como prefixo.
-    const residualText = spacedText
-        .replace(dateRegex, '') // Remove as datas
-        .replace(/\s*(de|a|até)\s*$/i, '') // Remove conectivos comuns no final
-        .replace(/^[-\s]+/, '') // Remove hífens no início
-        .trim();
-    
+    const residualText = spacedText.replace(dateRegex, '').replace(/\s*(de|a|até)\s*$/i, '').replace(/^[-\s]+/, '').trim();
     const statusKeywords = ['prorrogado', 'reaberto', 'verificar', 'conferir'];
     const hasStatusKeyword = statusKeywords.some(kw => lowerText.includes(kw));
-
     let formatted = datePart;
     if (hasStatusKeyword && residualText) {
         const capitalizedResidual = residualText.charAt(0).toUpperCase() + residualText.slice(1);
@@ -386,13 +321,11 @@ function parseDeadlineInfo(text: string | null | undefined): { dateForSort: stri
     } else if (lowerText.includes('prorrogado') || lowerText.includes('reaberto')) {
         formatted = `Prorrogado: ${formatted}`;
     }
-
     return {
         dateForSort: lastDate.toISOString(),
         formatted: formatted
     };
 }
-
 
 // --- Lógica de Scraping ---
 async function scrapeAllJobs() {
@@ -413,15 +346,12 @@ async function scrapeAllJobs() {
           const link = new URL(href, baseUrl).href;
           if (jobLinks.has(link)) return;
           jobLinks.add(link);
-          
           const orgao = linkElement.textContent?.trim() || 'Órgão não informado';
           const titulo = linkElement.getAttribute('title') || orgao;
           let localidade = locationElement?.textContent?.trim() || 'Nacional';
           if (!localidade || localidade === ' ') localidade = 'Nacional';
-          
           const allSpans = Array.from(detailsElement.querySelectorAll('span'));
           const escolaridade = allSpans.length > 0 ? allSpans.map((s: Element)=>s.textContent?.trim()).filter(Boolean).join(' / ') : 'Não informada';
-          
           let salario = 'Não informado';
           const clonedDetails = detailsElement.cloneNode(true) as Element;
           clonedDetails.querySelectorAll('span').forEach((span)=>span.remove());
@@ -429,13 +359,10 @@ async function scrapeAllJobs() {
           if (salaryText.startsWith('/')) salaryText = salaryText.substring(1).trim();
           if (salaryText.startsWith('•')) salaryText = salaryText.substring(1).trim();
           if (salaryText) salario = salaryText;
-          
           const cidadeEfetiva = extractEffectiveCity(orgao, titulo, localidade);
           const logoUrl = logoElement?.getAttribute('data-src');
           const prazoInscricao = deadlineElement?.textContent?.trim().replace(/\s+/g, ' ') || null;
-
           const { dateForSort: prazoInscricaoData, formatted: prazoInscricaoFormatado } = parseDeadlineInfo(prazoInscricao);
-          
           const { vacancies: vacanciesFromSalary, salary: parsedSalaryFromText } = parseSalaryAndVacancies(salario);
           const { vacancies: vacanciesFromTitle } = parseSalaryAndVacancies(titulo);
           const parsedVacancies = vacanciesFromSalary || vacanciesFromTitle;
@@ -450,7 +377,6 @@ async function scrapeAllJobs() {
                   mentionedStates.add(state.sigla);
               }
           });
-          
           const job = {
             titulo, orgao, localidade, salario, escolaridade, link,
             cidadeEfetiva: cidadeEfetiva,
@@ -495,6 +421,46 @@ async function scrapeAllJobs() {
   return results.flat();
 }
 
+async function processAndUploadLogos(jobs: any[], supabaseAdmin: SupabaseClient, existingJobsMap: Map<string, string | null>) {
+    const imageUploadPromises = jobs.map(async (job) => {
+        const existingLogoPath = existingJobsMap.get(job.link);
+        if (existingLogoPath) {
+            console.log(`Logo for "${job.orgao}" already exists in the database. Skipping download.`);
+            return { ...job, logoPath: existingLogoPath };
+        }
+        if (!job.logoUrl) {
+            return { ...job, logoPath: null };
+        }
+        try {
+            const imageResponse = await fetch(job.logoUrl);
+            if (!imageResponse.ok) {
+                throw new Error(`Failed to fetch logo: ${imageResponse.statusText}`);
+            }
+            const imageBuffer = await imageResponse.arrayBuffer();
+            const normalizedLink = job.link.replace(/[^a-zA-Z0-9]/g, '_');
+            const filePath = `logos/${normalizedLink}.webp`;
+            const { error: uploadError } = await supabaseAdmin.storage
+                .from('logos')
+                .upload(filePath, imageBuffer, { contentType: 'image/webp', upsert: true });
+            if (uploadError) {
+                throw uploadError;
+            }
+            return { ...job, logoPath: filePath };
+        } catch (error) {
+            console.warn(`Could not process logo for ${job.orgao} from ${job.logoUrl}. Error: ${getErrorMessage(error)}`);
+            return { ...job, logoPath: null };
+        }
+    });
+    const results = await Promise.allSettled(imageUploadPromises);
+    return results.map(result => {
+        if (result.status === 'fulfilled') {
+            return result.value;
+        }
+        console.error("A logo failed to be processed:", result.reason);
+        return result.reason; 
+    });
+}
+
 // --- Servidor Principal ---
 serve(async (req)=>{
   if (req.method === "OPTIONS") {
@@ -505,13 +471,55 @@ serve(async (req)=>{
   try {
     console.log("Job scraping started...");
     const runId = crypto.randomUUID();
-    const allJobs = await scrapeAllJobs();
-    console.log(`Job scraping finished. Found ${allJobs.length} jobs. Upserting into database with run_id: ${runId}`);
+    const allJobsRaw = await scrapeAllJobs();
+    
+    if (allJobsRaw.length < MINIMUM_JOBS_THRESHOLD) {
+        throw new Error(`SECURITY SAFEGUARD: Scraping returned only ${allJobsRaw.length} jobs, which is below the threshold of ${MINIMUM_JOBS_THRESHOLD}. Aborting run to prevent data loss.`);
+    }
     
     const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+
+    const scrapedLinks = allJobsRaw.map(job => job.link);
+    console.log(`Scraped ${scrapedLinks.length} links. Checking for existing jobs in the database in chunks...`);
+
+    const CHUNK_SIZE = 100;
+    const promises = [];
+
+    for (let i = 0; i < scrapedLinks.length; i += CHUNK_SIZE) {
+        const chunk = scrapedLinks.slice(i, i + CHUNK_SIZE);
+        const promise = supabaseAdmin
+            .from('job_openings')
+            .select('link, logo_path')
+            .in('link', chunk);
+        promises.push(promise);
+    }
+
+    const results = await Promise.all(promises);
+    const existingJobs = results.flatMap(result => {
+        if (result.error) {
+            console.error("Error in one of the chunks:", result.error);
+            throw new Error(`Failed to fetch a chunk of existing jobs: ${getErrorMessage(result.error)}`);
+        }
+        return result.data || [];
+    });
+
+    const existingJobsMap = new Map<string, string | null>();
+    if (existingJobs) {
+        for (const job of existingJobs) {
+            existingJobsMap.set(job.link, job.logo_path);
+        }
+    }
+    console.log(`Found ${existingJobsMap.size} existing jobs in the database.`);
+
+    console.log(`Processing ${allJobsRaw.length} logos...`);
+    const allJobsWithLogoPath = await processAndUploadLogos(allJobsRaw, supabaseAdmin, existingJobsMap);
     
-    // NOTA: Para este código funcionar, a tabela 'job_openings' precisa de uma nova coluna chamada 'last_run_id' (TEXT ou UUID).
-    const jobsToUpsert = allJobs.map((job) => ({
+    let uploadedLogoCount = allJobsWithLogoPath.filter(job => job.logoPath && !existingJobsMap.has(job.link)).length;
+    console.log(`Finished processing logos. ${uploadedLogoCount} NEW logos uploaded to storage.`);
+    
+    console.log(`Upserting ${allJobsWithLogoPath.length} jobs into database with run_id: ${runId}`);
+    
+    const jobsToUpsert = allJobsWithLogoPath.map((job) => ({
         title: job.titulo,
         organization: job.orgao,
         location: job.localidade,
@@ -520,7 +528,7 @@ serve(async (req)=>{
         link: job.link,
         city: job.cidadeEfetiva || undefined,
         effective_city: job.cidadeEfetiva,
-        logo_url: job.logoUrl,
+        logo_path: job.logoPath,
         deadline_text: job.prazoInscricao,
         deadline_date: job.prazoInscricaoData,
         deadline_formatted: job.prazoInscricaoFormatado,
@@ -542,27 +550,21 @@ serve(async (req)=>{
     const { error: upsertError } = await supabaseAdmin.from('job_openings').upsert(jobsToUpsert, { onConflict: 'link' });
     if (upsertError) throw new Error(`Failed to upsert jobs: ${getErrorMessage(upsertError)}`);
 
-    let deletedCount = 0;
-    // SALVAGUARDA: Apenas deleta registros antigos se o scraping encontrou um número razoável de vagas.
-    if (jobsToUpsert.length > MINIMUM_JOBS_THRESHOLD) {
-        console.log(`Deleting stale jobs (not part of run_id ${runId})...`);
-        const { data: deleteData, error: deleteError } = await supabaseAdmin
-            .from('job_openings')
-            .delete()
-            .neq('last_run_id', runId);
+    console.log(`Deleting stale jobs (not part of run_id ${runId})...`);
+    const { count: deleteCount, error: deleteError } = await supabaseAdmin
+        .from('job_openings')
+        .delete({ count: 'exact' })
+        .neq('last_run_id', runId);
 
-        if (deleteError) {
-            console.error(`Failed to delete stale jobs: ${getErrorMessage(deleteError)}`);
-        } else {
-            deletedCount = Array.isArray(deleteData) ? deleteData.length : 0;
-            console.log(`Deleted ${deletedCount} stale jobs.`);
-        }
+    let deletedCount = deleteCount || 0;
+    if (deleteError) {
+        console.error(`Failed to delete stale jobs: ${getErrorMessage(deleteError)}`);
     } else {
-        console.warn(`SECURITY SAFEGUARD: Scraping returned only ${jobsToUpsert.length} jobs, which is below the threshold of ${MINIMUM_JOBS_THRESHOLD}. Skipping delete operation to prevent accidental data loss.`);
+        console.log(`Deleted ${deletedCount} stale jobs.`);
     }
     
     const responseBody = {
-      message: `Scraping complete. Upserted/updated ${allJobs.length} jobs. Deleted ${deletedCount} stale jobs.`
+      message: `Scraping complete. Upserted/updated ${allJobsWithLogoPath.length} jobs. Uploaded ${uploadedLogoCount} new logos. Deleted ${deletedCount} stale jobs.`
     };
 
     return new Response(JSON.stringify(responseBody), {

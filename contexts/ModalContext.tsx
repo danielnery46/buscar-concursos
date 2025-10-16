@@ -9,7 +9,8 @@ import {
     CepInputModal,
     InteractiveTutorial,
     DefaultSearchModal,
-    DefaultPredictedNewsModal
+    DefaultPredictedNewsModal,
+    DataMigrationModal
 } from '../components/modals';
 import { useUserData } from './UserDataContext';
 
@@ -22,7 +23,8 @@ type ModalType =
     | 'cepInput'
     | 'tutorial'
     | 'defaultSearch'
-    | 'defaultPredictedNews';
+    | 'defaultPredictedNews'
+    | 'dataMigration';
 
 interface ModalPropsMap {
     webContent: { url: string; title: string };
@@ -34,6 +36,7 @@ interface ModalPropsMap {
     tutorial: { onDone: () => void };
     defaultSearch: { onSave: (criteria: SearchCriteria) => void; isCityDataLoading: boolean; cityDataCache: Record<string, City[]> };
     defaultPredictedNews: { onSave: (criteria: PredictedCriteria) => void; title: string; description: string; };
+    dataMigration: { onMigrate: () => void; onDiscard: () => void };
 }
 
 interface ModalState {
@@ -48,7 +51,7 @@ interface ModalContextType extends ModalState {
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
 
-const ModalManager: React.FC = () => {
+export const ModalManager: React.FC = () => {
     const { modalType, modalProps, closeModal, openModal } = useModal();
     const { setCidadeRota } = useUserData();
 
@@ -96,6 +99,8 @@ const ModalManager: React.FC = () => {
             return <DefaultSearchModal isOpen={true} onClose={closeModal} {...modalProps} />;
         case 'defaultPredictedNews':
             return <DefaultPredictedNewsModal isOpen={true} onClose={closeModal} {...modalProps} />;
+        case 'dataMigration':
+            return <DataMigrationModal isOpen={true} onClose={modalProps.onDiscard} {...modalProps} />;
         default:
             return null;
     }
@@ -121,7 +126,6 @@ export const ModalProvider: FC<ModalProviderProps> = ({ children }) => {
     return (
         <ModalContext.Provider value={value}>
             {children}
-            <ModalManager />
         </ModalContext.Provider>
     );
 };

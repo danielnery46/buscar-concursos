@@ -24,8 +24,19 @@ export function ChangelogModal({ isOpen, onClose }: ModalProps) {
                     <main className="p-4 sm:p-6 overflow-y-auto flex-1">
                         <div className="prose prose-base dark:prose-invert max-w-none">
                             <div className="not-prose p-4 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-500/30 rounded-lg mb-4">
-                                <h3 className="text-lg font-bold text-indigo-800 dark:text-indigo-200">Novidades da versão 1.9</h3>
+                                <h3 className="text-lg font-bold text-indigo-800 dark:text-indigo-200">Novidades da versão 2.0</h3>
                                 <ul className="mt-2 space-y-2 list-disc list-outside pl-5 text-indigo-700 dark:text-indigo-300">
+                                    <li><span className="font-semibold">Migração de Dados Locais:</span> Ao fazer login, o sistema agora detecta dados salvos localmente e oferece a opção de migrá-los para sua conta na nuvem.</li>
+                                    <li><span className="font-semibold">Otimização do Banco de Dados:</span> Realizamos uma otimização nas consultas ao banco de dados, resultando em buscas mais rápidas e eficientes.</li>
+                                    <li><span className="font-semibold">Extração de Dados Aprimorada:</span> Os robôs de extração de dados foram aprimorados para garantir maior precisão e confiabilidade das informações.</li>
+                                    <li><span className="font-semibold">Animações Padronizadas:</span> As animações de carregamento foram unificadas em todo o site para uma experiência visual mais coesa.</li>
+                                    <li><span className="font-semibold">Menu de Ordenação Reposicionado:</span> A opção para ordenar os resultados foi movida para dentro do painel de "Filtros", centralizando as opções de busca.</li>
+                                    <li><span className="font-semibold">Correções Gerais de Bugs:</span> Diversos bugs menores foram corrigidos, melhorando a estabilidade e a experiência de uso da plataforma.</li>
+                                </ul>
+                            </div>
+                            <div className="not-prose p-4 bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-500/30 rounded-lg mb-4">
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">Novidades da versão 1.9</h3>
+                                <ul className="mt-2 space-y-2 list-disc list-outside pl-5 text-gray-700 dark:text-gray-300">
                                     <li><span className="font-semibold">Retrabalho Visual Completo:</span> A interface do site foi completamente modernizada para uma experiência de uso mais agradável e intuitiva.</li>
                                     <li><span className="font-semibold">Sistema de Contas:</span> Agora é possível criar uma conta para salvar seus filtros, buscas favoritas e configurações de acessibilidade na nuvem.</li>
                                     <li><span className="font-semibold">Nova Aba "Previstos":</span> Adicionamos uma nova aba para você acompanhar os concursos que estão previstos para acontecer.</li>

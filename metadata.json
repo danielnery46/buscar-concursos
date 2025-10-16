@@ -1,5 +1,5 @@
 {
-  "name": "Buscar Concursos v1.9",
-  "description": "An application to find and filter public job openings in Brazil. Data is sourced from public listings and presented in a modern, user-friendly interface with advanced search and filtering capabilities.",
+  "name": "Buscar Concursos 2.0",
+  "description": "Encontre milhares de vagas em concursos públicos e processos seletivos abertos em todo o Brasil. Filtre por estado, cidade, salário, escolaridade e mais.",
   "requestFramePermissions": []
 }

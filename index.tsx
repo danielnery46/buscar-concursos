@@ -20,7 +20,7 @@ import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { UserDataProvider } from './contexts/UserDataContext';
 import { SettingsProvider } from './contexts/SettingsContext';
-import { ModalProvider } from './contexts/ModalContext';
+import { ModalManager, ModalProvider } from './contexts/ModalContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -31,13 +31,14 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <AuthProvider>
-      <UserDataProvider>
-        <SettingsProvider>
-          <ModalProvider>
+      <ModalProvider>
+        <UserDataProvider>
+          <SettingsProvider>
             <App />
-          </ModalProvider>
-        </SettingsProvider>
-      </UserDataProvider>
+            <ModalManager />
+          </SettingsProvider>
+        </UserDataProvider>
+      </ModalProvider>
     </AuthProvider>
   </React.StrictMode>
 );

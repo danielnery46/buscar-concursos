@@ -98,6 +98,7 @@ export const systemDefaultValues: Omit<SearchCriteria, 'name'> = {
     palavraChave: '',
     incluirVizinhos: false,
     distanciaRaio: '' as const,
+    sort: 'alpha-asc',
 };
 
 export const defaultPredictedValues: Omit<PredictedCriteria, 'name'> = {
@@ -106,6 +107,7 @@ export const defaultPredictedValues: Omit<PredictedCriteria, 'name'> = {
     month: 'todos',
     year: 'todos',
     sources: [] as string[],
+    sort: 'date-desc',
 };
 
 export const currentYear = new Date().getFullYear();

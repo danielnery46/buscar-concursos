@@ -1,5 +1,6 @@
 export * from './CepInputModal';
 export * from './ChangelogModal';
+export * from './DataMigrationModal';
 export * from './DefaultPredictedNewsModal';
 export * from './DefaultSearchModal';
 export * from './DonationModal';

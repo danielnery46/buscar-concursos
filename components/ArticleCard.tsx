@@ -78,12 +78,30 @@ export const ArticleCard = memo<ArticleCardProps>(({ item, itemType }) => {
     const handleShareClick = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
-        const success = await copyToClipboard(item.link);
-        if (success) {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+        setCopied(false); // Reset copy confirmation state
+
+        const shareData = {
+            title: item.title,
+            text: `Confira: ${item.title}`,
+            url: item.link,
+        };
+
+        try {
+            if (navigator.share) {
+                await navigator.share(shareData);
+            } else {
+                throw new Error('Web Share API not available.');
+            }
+        } catch (error) {
+            console.log('Falha ao compartilhar, usando copiar para a área de transferência:', error);
+            // Fallback to clipboard
+            const success = await copyToClipboard(item.link);
+            if (success) {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            }
         }
-    }, [item.link]);
+    }, [item.link, item.title]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' || e.key === ' ') {

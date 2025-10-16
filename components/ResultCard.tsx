@@ -15,6 +15,7 @@ import { useModal } from '../contexts/ModalContext';
 import { useUserData } from '../contexts/UserDataContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useCardInteraction } from '../hooks/useCardInteraction';
+import { supabase } from '../utils/supabase';
 
 
 interface ResultCardProps {
@@ -54,6 +55,22 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
     const [copied, setCopied] = useState(false);
     const cardRef = useRef<HTMLDivElement>(null);
 
+    const optimizedLogoUrl = useMemo(() => {
+        if (!job.logoPath) return null;
+        
+        // Defensivo: Remove o prefixo 'public/' se existir, para compatibilidade com dados antigos.
+        const path = job.logoPath.startsWith('public/') ? job.logoPath.substring(7) : job.logoPath;
+
+        const { data } = supabase.storage.from('logos').getPublicUrl(path, {
+            transform: {
+                width: 100,
+                height: 100,
+                quality: 75,
+            }
+        });
+        return data.publicUrl;
+    }, [job.logoPath]);
+
     useEffect(() => {
         if (!openLinksInModal || !cardRef.current) return;
 
@@ -90,15 +107,35 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
         }
     }, [cidadeRota, openModal, job]);
 
-    const handleCopyLink = async (e: React.MouseEvent) => {
+    const handleShareClick = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
-        const success = await copyToClipboard(job.link);
-        if (success) {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+        setCopied(false); // Reset copy confirmation state
+
+        const shareData = {
+            title: `Vaga de concurso: ${job.orgao}`,
+            text: `Confira esta oportunidade: ${job.titulo}.`,
+            url: job.link,
+        };
+
+        try {
+            // Use the Web Share API if available
+            if (navigator.share) {
+                await navigator.share(shareData);
+            } else {
+                // Fallback for desktop or browsers without share API
+                throw new Error('Web Share API not available.');
+            }
+        } catch (error) {
+            console.log('Falha ao compartilhar, usando copiar para a área de transferência:', error);
+            // Fallback to clipboard
+            const success = await copyToClipboard(job.link);
+            if (success) {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            }
         }
-    };
+    }, [job.link, job.orgao, job.titulo]);
     
     const shouldShowLocationPill = (showLocationPillForStateJobs || (job.mentionedStates && job.mentionedStates.length > 0)) && job.mentionedStates && job.mentionedStates.length > 0;
     
@@ -118,9 +155,13 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
             className="relative group flex flex-col h-full bg-white dark:bg-slate-900 dark:bg-gradient-to-br dark:from-slate-900 dark:to-slate-800 border border-gray-200 dark:border-slate-800 rounded-2xl shadow-sm dark:shadow-lg dark:shadow-black/20 p-5 hover:border-indigo-500/50 dark:hover:border-indigo-500/80 transition-all duration-300 transform hover:-translate-y-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-slate-900 focus:ring-indigo-500">
             
             <div className="flex items-start gap-4">
-                {job.logoUrl && (
-                    <div className="flex-shrink-0 w-14 h-14 bg-white rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-200 p-1">
-                        <img src={job.logoUrl} alt={`Logo de ${job.orgao}`} className="max-w-full max-h-full object-contain" loading="lazy" />
+                {optimizedLogoUrl ? (
+                    <div className="flex-shrink-0 w-14 h-14 bg-white rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-200 p-1 overflow-hidden">
+                        <img src={optimizedLogoUrl} alt={`Logo de ${job.orgao}`} className="max-w-full max-h-full object-contain text-xs text-center text-gray-400" loading="lazy" />
+                    </div>
+                ) : (
+                    <div className="flex-shrink-0 w-14 h-14 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-700 p-1">
+                        <span className="text-xs text-center text-gray-400 dark:text-gray-500 font-semibold">Logo</span>
                     </div>
                 )}
                 <div className="flex-1 min-w-0">
@@ -168,7 +209,7 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
                             <RouteIcon className="h-5 w-5"/>
                         </button>
                     )}
-                    <button onClick={handleCopyLink} aria-label={copied ? "Link copiado!" : "Compartilhar"} title={copied ? "Link copiado!" : "Compartilhar"} className={`p-1.5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 ${copied ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+                    <button onClick={handleShareClick} aria-label={copied ? "Link copiado!" : "Compartilhar"} title={copied ? "Link copiado!" : "Compartilhar"} className={`p-1.5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 ${copied ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
                         {copied ? <CheckIcon className="h-5 w-5" /> : <ShareIcon className="h-5 w-5"/>}
                     </button>
                 </div>

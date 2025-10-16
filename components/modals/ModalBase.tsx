@@ -85,9 +85,10 @@ interface ContentModalLayoutProps {
     headerTitle: React.ReactNode;
     children: React.ReactNode;
     containerClasses?: string;
+    hideCloseButton?: boolean;
 }
 
-export const ContentModalLayout: React.FC<ContentModalLayoutProps> = ({ modalRef, showContent, onClose, headerIcon, headerTitle, children, containerClasses }) => {
+export const ContentModalLayout: React.FC<ContentModalLayoutProps> = ({ modalRef, showContent, onClose, headerIcon, headerTitle, children, containerClasses, hideCloseButton = false }) => {
     return (
         <div
             ref={modalRef}
@@ -103,9 +104,11 @@ export const ContentModalLayout: React.FC<ContentModalLayoutProps> = ({ modalRef
                         {headerTitle}
                     </div>
                 </div>
-                <Button variant="ghost" size="icon" onClick={onClose} aria-label="Fechar modal">
-                    <CloseIcon className="h-6 w-6 text-gray-600 dark:text-gray-300" />
-                </Button>
+                {!hideCloseButton && (
+                    <Button variant="ghost" size="icon" onClick={onClose} aria-label="Fechar modal">
+                        <CloseIcon className="h-6 w-6 text-gray-600 dark:text-gray-300" />
+                    </Button>
+                )}
             </header>
             {children}
         </div>

@@ -1,5 +1,5 @@
 import { ESTADOS_POR_REGIAO, systemDefaultValues, defaultPredictedValues, monthNames } from '../constants';
-import { FormattedSearchDetail, PredictedCriteria, SearchCriteria, SummaryData } from '../types';
+import { FormattedSearchDetail, PredictedCriteria, SearchCriteria, SummaryData, OpenJobsSortOption, ArticleSortOption } from '../types';
 
 /**
  * Formats a number into a BRL currency string.
@@ -64,6 +64,18 @@ export const createShareMessage = (criteria: SearchCriteria, summary: SummaryDat
  * @returns An object with a `title` string and an array of `details`.
  */
 export function formatSearchCriteria(criteria: Partial<SearchCriteria>): { title: string; details: FormattedSearchDetail[] } {
+    const openJobsSortOptions: { value: OpenJobsSortOption; label: string }[] = [
+        { value: 'alpha-asc', label: 'Órgão (A-Z)' },
+        { value: 'alpha-desc', label: 'Órgão (Z-A)' },
+        { value: 'deadline-asc', label: 'Prazo (Mais próximo)' },
+        { value: 'deadline-desc', label: 'Prazo (Mais distante)' },
+        { value: 'salary-desc', label: 'Maior Salário' },
+        { value: 'salary-asc', label: 'Menor Salário' },
+        { value: 'vacancies-desc', label: 'Mais Vagas' },
+        { value: 'vacancies-asc', label: 'Menos Vagas' },
+        { value: 'distance-asc', label: 'Mais Perto' },
+        { value: 'distance-desc', label: 'Mais Longe' },
+    ];
     const allStates = Object.values(ESTADOS_POR_REGIAO).flat();
     const fullCriteria = { ...systemDefaultValues, ...criteria };
 
@@ -131,6 +143,10 @@ export function formatSearchCriteria(criteria: Partial<SearchCriteria>): { title
     if (fullCriteria.vagasMinimas && fullCriteria.vagasMinimas > 0) {
         details.push({ type: 'vacancies', text: `Vagas > ${fullCriteria.vagasMinimas}`, key: 'vagasMinimas' });
     }
+    if (fullCriteria.sort && fullCriteria.sort !== systemDefaultValues.sort) {
+        const sortLabel = openJobsSortOptions.find(o => o.value === fullCriteria.sort)?.label || fullCriteria.sort;
+        details.push({ type: 'keyword', text: `Ordem: ${sortLabel}`, key: 'sort' });
+    }
 
     return { title, details };
 }
@@ -141,6 +157,10 @@ export function formatSearchCriteria(criteria: Partial<SearchCriteria>): { title
  * @returns An object with a `title` string and an array of `details`.
  */
 export function formatPredictedCriteria(criteria: Partial<PredictedCriteria>): { title: string; details: FormattedSearchDetail[] } {
+    const articleSortOptions: { value: ArticleSortOption; label: string }[] = [
+        { value: 'date-desc', label: 'Mais Recentes' },
+        { value: 'date-asc', label: 'Mais Antigos' },
+    ];
     const allStates = Object.values(ESTADOS_POR_REGIAO).flat();
     const fullCriteria = { ...defaultPredictedValues, ...criteria };
 
@@ -187,6 +207,10 @@ export function formatPredictedCriteria(criteria: Partial<PredictedCriteria>): {
     }
     if (fullCriteria.sources && fullCriteria.sources.length > 0) {
         details.push({ type: 'source', text: `${fullCriteria.sources.length} fonte(s)`, key: 'sources' });
+    }
+    if (fullCriteria.sort && fullCriteria.sort !== defaultPredictedValues.sort) {
+        const sortLabel = articleSortOptions.find(o => o.value === fullCriteria.sort)?.label || fullCriteria.sort;
+        details.push({ type: 'date', text: `Ordem: ${sortLabel}`, key: 'sort' });
     }
 
     return { title, details };

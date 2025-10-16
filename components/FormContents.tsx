@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, memo } from 'react';
-import { City, SearchCriteria, PredictedCriteria, Estado } from '../types';
+import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
+import { City, SearchCriteria, PredictedCriteria, Estado, OpenJobsSortOption, ArticleSortOption } from '../types';
 import { NIVEIS_ESCOLARIDADE, ESTADOS_POR_REGIAO, years, months, monthNames } from '../constants';
 import { useDebounce } from '../hooks/useDebounce';
 import { formatCurrency } from '../utils/formatters';
@@ -11,6 +11,7 @@ import {
     DocumentTextIcon,
     SlidersIcon,
     TypeIcon,
+    SortIcon,
 } from './Icons';
 import { Accordion } from './ui/Accordion';
 import { CustomCheckbox } from './ui/Checkbox';
@@ -79,6 +80,46 @@ export const SearchFormContent: React.FC<SearchFormContentProps> = memo(({ crite
     const isStateSelected = criteria.estado.length === 2;
     const isCityFilterActive = criteria.cidadeFiltro.trim() !== '';
     const isDistanceFilterActive = criteria.distanciaRaio !== '';
+
+    // Gerencia a ordenação automaticamente com base no filtro de distância
+    const prevIsDistanceFilterActive = useRef(isDistanceFilterActive);
+    useEffect(() => {
+        const wasActive = prevIsDistanceFilterActive.current;
+        const isActive = criteria.distanciaRaio !== '';
+
+        // Se o filtro de distância foi recém-ativado, define a ordenação para 'Mais Perto'
+        if (isActive && !wasActive) {
+            onCriteriaChange(prev => ({ ...prev, sort: 'distance-asc' }));
+        } 
+        // Se o filtro de distância foi desativado e a ordenação era por distância, reseta
+        else if (!isActive && wasActive && (criteria.sort === 'distance-asc' || criteria.sort === 'distance-desc')) {
+            onCriteriaChange(prev => ({ ...prev, sort: 'alpha-asc' }));
+        }
+
+        // Atualiza o estado anterior para a próxima renderização
+        prevIsDistanceFilterActive.current = isActive;
+    }, [criteria.distanciaRaio, criteria.sort, onCriteriaChange]);
+    
+    const sortOptions = useMemo(() => {
+        const baseOptions: { value: OpenJobsSortOption; label: string }[] = [
+            { value: 'alpha-asc', label: 'Órgão (A-Z)' },
+            { value: 'alpha-desc', label: 'Órgão (Z-A)' },
+            { value: 'deadline-asc', label: 'Prazo (Mais próximo)' },
+            { value: 'deadline-desc', label: 'Prazo (Mais distante)' },
+            { value: 'salary-desc', label: 'Maior Salário' },
+            { value: 'salary-asc', label: 'Menor Salário' },
+            { value: 'vacancies-desc', label: 'Mais Vagas' },
+            { value: 'vacancies-asc', label: 'Menos Vagas' },
+        ];
+        if (isDistanceFilterActive) {
+            return [
+                { value: 'distance-asc', label: 'Mais Perto' },
+                { value: 'distance-desc', label: 'Mais Longe' },
+                ...baseOptions,
+            ];
+        }
+        return baseOptions;
+    }, [isDistanceFilterActive]);
 
     const locationSummary = useMemo(() => {
         if (criteria.estado === 'brasil') return 'Brasil';
@@ -149,6 +190,23 @@ export const SearchFormContent: React.FC<SearchFormContentProps> = memo(({ crite
                 <div className="relative"><label htmlFor="palavraChave" className="sr-only">Palavra-chave no título</label><input type="text" id="palavraChave" value={localKeyword} onChange={(e) => setLocalKeyword(e.target.value)} placeholder="Palavra-chave no título" className="w-full text-base px-4 py-2 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-gray-400 dark:placeholder:text-gray-500" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Nível de escolaridade</label><div className="grid gap-2 grid-cols-2">{NIVEIS_ESCOLARIDADE.filter((n: string) => n !== 'Qualquer').map((nivel: string) => (<CustomCheckbox key={nivel} id={`esc-${nivel.replace(/\s/g, '-')}`} value={nivel} checked={criteria.escolaridade.includes(nivel)} onChange={handleEscolaridadeChange}>{nivel.replace('Nível ', '')}</CustomCheckbox>))}</div></div>
             </Accordion>
+            <Accordion title="Ordenação" icon={<SortIcon className="h-5 w-5" />} isOpen={openAccordions.includes('sort')} onToggle={() => toggleAccordion('sort')} summary={sortOptions.find(o => o.value === criteria.sort)?.label}>
+                <div>
+                    <label htmlFor="sort" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Ordenar resultados por</label>
+                    <div className="relative">
+                        <select
+                            id="sort"
+                            value={criteria.sort}
+                            onChange={(e) => onCriteriaChange(prev => ({ ...prev, sort: e.target.value as OpenJobsSortOption }))}
+                            className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]"
+                        >
+                            {sortOptions.map(option => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+            </Accordion>
         </div>
     );
 });
@@ -163,6 +221,11 @@ interface PredictedNewsFormContentProps {
     availableSources?: string[];
     isModalView?: boolean;
 }
+
+const articleSortOptions: { value: ArticleSortOption; label: string }[] = [
+    { value: 'date-desc', label: 'Mais Recentes' },
+    { value: 'date-asc', label: 'Mais Antigos' },
+];
 
 export const PredictedNewsFormContent: React.FC<PredictedNewsFormContentProps> = memo(({ criteria, onCriteriaChange, availableSources, isModalView = false }) => {
     const [openAccordions, setOpenAccordions] = useState<string[]>([]);
@@ -253,6 +316,23 @@ export const PredictedNewsFormContent: React.FC<PredictedNewsFormContentProps> =
                                 {months.map(m => <option key={m} value={m}>{monthNames[m - 1]}</option>)}
                             </select>
                         </div>
+                    </div>
+                </div>
+            </Accordion>
+             <Accordion title="Ordenação" icon={<SortIcon className="h-5 w-5" />} isOpen={openAccordions.includes('sort')} onToggle={() => toggleAccordion('sort')} summary={articleSortOptions.find(o => o.value === criteria.sort)?.label}>
+                <div>
+                    <label htmlFor="sort-predicted" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Ordenar resultados por</label>
+                    <div className="relative">
+                        <select
+                            id="sort-predicted"
+                            value={criteria.sort}
+                            onChange={e => onCriteriaChange(prev => ({ ...prev, sort: e.target.value as ArticleSortOption }))}
+                            className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]"
+                        >
+                            {articleSortOptions.map(option => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                        </select>
                     </div>
                 </div>
             </Accordion>
