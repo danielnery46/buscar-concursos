@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2025 Daniel Nery Frangilo Paiva
  *
@@ -69,8 +70,9 @@ function buildBaseJobQuery(criteria: SearchCriteria, signal?: AbortSignal) {
     }
 
     if (criteria.escolaridade && criteria.escolaridade.length > 0) {
-        // Use the 'ov' (overlaps) operator. The value needs to be a Postgres array literal string: '{value1,value2}'
-        query = query.filter('education_levels', 'ov', `{${criteria.escolaridade.join(',')}}`);
+        // FIX: Use .or() with 'cs' (contains) for jsonb array filtering instead of 'ov'
+        const orFilter = criteria.escolaridade.map(level => `education_levels.cs.["${level}"]`).join(',');
+        query = query.or(orFilter);
     }
     
     if (criteria.salarioMinimo) {
@@ -91,16 +93,18 @@ function buildBaseJobQuery(criteria: SearchCriteria, signal?: AbortSignal) {
             const regionKey = Object.keys(ESTADOS_POR_REGIAO).find(k => k.toLowerCase() === regionKeyRaw);
             if (regionKey) {
                 const regionStates = ESTADOS_POR_REGIAO[regionKey].map(s => s.sigla);
-                // Use the 'ov' (overlaps) operator. The value needs to be a Postgres array literal string: '{value1,value2}'
-                query = query.filter('mentioned_states', 'ov', `{${regionStates.join(',')}}`);
+                // FIX: Use .or() with 'cs' (contains) for jsonb array filtering instead of 'ov'
+                const orFilter = regionStates.map(state => `mentioned_states.cs.["${state}"]`).join(',');
+                query = query.or(orFilter);
             }
         } else {
             const targetStates = [criteria.estado.toUpperCase()];
             if (criteria.incluirVizinhos && VIZINHANCAS_ESTADOS[criteria.estado.toUpperCase()]) {
                 targetStates.push(...VIZINHANCAS_ESTADOS[criteria.estado.toUpperCase()]);
             }
-            // Use the 'ov' (overlaps) operator. The value needs to be a Postgres array literal string: '{value1,value2}'
-            query = query.filter('mentioned_states', 'ov', `{${targetStates.join(',')}}`);
+            // FIX: Use .or() with 'cs' (contains) for jsonb array filtering instead of 'ov'
+            const orFilter = targetStates.map(state => `mentioned_states.cs.["${state}"]`).join(',');
+            query = query.or(orFilter);
         }
     }
     
@@ -181,11 +185,14 @@ export async function fetchArticles(table: 'predicted_openings' | 'news_articles
             const regionKey = Object.keys(ESTADOS_POR_REGIAO).find(k => k.toLowerCase() === regionKeyRaw);
             if (regionKey) {
                 const regionStates = ESTADOS_POR_REGIAO[regionKey].map(s => s.sigla);
-                query = query.filter('mentioned_states', 'ov', regionStates);
+                // FIX: Use .or() with 'cs' (contains) for jsonb array filtering
+                const orFilter = regionStates.map(state => `mentioned_states.cs.["${state}"]`).join(',');
+                query = query.or(orFilter);
             }
         } else {
-            // Use .contains() to check if the JSONB array contains the specified state.
-            query = query.contains('mentioned_states', [location.toUpperCase()]);
+            // FIX: Use .or() with a 'cs' filter string to correctly query the jsonb array.
+            const orFilter = `mentioned_states.cs.["${location.toUpperCase()}"]`;
+            query = query.or(orFilter);
         }
     }
     
