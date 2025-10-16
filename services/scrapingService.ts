@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2025 Daniel Nery Frangilo Paiva
  *
@@ -136,6 +135,10 @@ export async function fetchJobs(criteria: SearchCriteria, page: number, pageSize
 
     const { data, error, count } = await query;
     if (error) {
+        // Do not log AbortError, as it's an expected cancellation.
+        if (error.name === 'AbortError') {
+            throw error;
+        }
         console.error(`Error fetching jobs (type: ${type}):`, error);
         throw new Error(`Failed to fetch jobs`);
     }
@@ -149,8 +152,12 @@ export async function fetchJobsSummary(criteria: SearchCriteria, signal?: AbortS
     const { data, error, count } = await query;
 
     if (error) {
+        // Do not log AbortError, as it's an expected cancellation.
+        if (error.name === 'AbortError') {
+            throw error;
+        }
         console.error('Error fetching jobs summary:', error);
-        return { totalOpportunities: 0, totalVacancies: 0, highestSalary: 0 };
+        throw new Error('Failed to fetch jobs summary');
     }
 
     const summary = (data || []).reduce(
@@ -219,6 +226,10 @@ export async function fetchArticles(table: 'predicted_openings' | 'news_articles
 
     const { data, error, count } = await query;
     if (error) {
+        // Do not log AbortError, as it's an expected cancellation.
+        if (error.name === 'AbortError') {
+            throw error;
+        }
         console.error(`Error fetching articles from ${table}:`, error);
         throw new Error(`Failed to fetch articles from ${table}`);
     }
