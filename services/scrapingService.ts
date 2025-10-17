@@ -16,7 +16,7 @@
 
 import { ProcessedJob, ProcessedPredictedJob, SearchCriteria, PredictedCriteria } from '../types';
 import { supabase } from '../utils/supabase';
-// FIX: Import normalizeText from its dedicated module.
+// Import normalizeText from its dedicated module.
 import { normalizeText } from '../utils/text';
 import { ESTADOS_POR_REGIAO, VIZINHANCAS_ESTADOS } from '../constants';
 
@@ -69,7 +69,7 @@ function buildBaseJobQuery(criteria: SearchCriteria, signal?: AbortSignal) {
     }
 
     if (criteria.escolaridade && criteria.escolaridade.length > 0) {
-        // FIX: Use .or() with 'cs' (contains) for jsonb array filtering instead of 'ov'
+        // Use .or() with 'cs' (contains) for jsonb array filtering.
         const orFilter = criteria.escolaridade.map(level => `education_levels.cs.["${level}"]`).join(',');
         query = query.or(orFilter);
     }
@@ -92,7 +92,7 @@ function buildBaseJobQuery(criteria: SearchCriteria, signal?: AbortSignal) {
             const regionKey = Object.keys(ESTADOS_POR_REGIAO).find(k => k.toLowerCase() === regionKeyRaw);
             if (regionKey) {
                 const regionStates = ESTADOS_POR_REGIAO[regionKey].map(s => s.sigla);
-                // FIX: Use .or() with 'cs' (contains) for jsonb array filtering instead of 'ov'
+                // Use .or() with 'cs' (contains) for jsonb array filtering.
                 const orFilter = regionStates.map(state => `mentioned_states.cs.["${state}"]`).join(',');
                 query = query.or(orFilter);
             }
@@ -101,7 +101,7 @@ function buildBaseJobQuery(criteria: SearchCriteria, signal?: AbortSignal) {
             if (criteria.incluirVizinhos && VIZINHANCAS_ESTADOS[criteria.estado.toUpperCase()]) {
                 targetStates.push(...VIZINHANCAS_ESTADOS[criteria.estado.toUpperCase()]);
             }
-            // FIX: Use .or() with 'cs' (contains) for jsonb array filtering instead of 'ov'
+            // Use .or() with 'cs' (contains) for jsonb array filtering.
             const orFilter = targetStates.map(state => `mentioned_states.cs.["${state}"]`).join(',');
             query = query.or(orFilter);
         }
@@ -192,12 +192,12 @@ export async function fetchArticles(table: 'predicted_openings' | 'news_articles
             const regionKey = Object.keys(ESTADOS_POR_REGIAO).find(k => k.toLowerCase() === regionKeyRaw);
             if (regionKey) {
                 const regionStates = ESTADOS_POR_REGIAO[regionKey].map(s => s.sigla);
-                // FIX: Use .or() with 'cs' (contains) for jsonb array filtering
+                // Use .or() with 'cs' (contains) for jsonb array filtering
                 const orFilter = regionStates.map(state => `mentioned_states.cs.["${state}"]`).join(',');
                 query = query.or(orFilter);
             }
         } else {
-            // FIX: Use .or() with a 'cs' filter string to correctly query the jsonb array.
+            // Use .or() with a 'cs' filter string to correctly query the jsonb array.
             const orFilter = `mentioned_states.cs.["${location.toUpperCase()}"]`;
             query = query.or(orFilter);
         }
