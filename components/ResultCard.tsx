@@ -61,13 +61,7 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
         // Defensivo: Remove o prefixo 'public/' se existir, para compatibilidade com dados antigos.
         const path = job.logoPath.startsWith('public/') ? job.logoPath.substring(7) : job.logoPath;
 
-        const { data } = supabase.storage.from('logos').getPublicUrl(path, {
-            transform: {
-                width: 100,
-                height: 100,
-                quality: 75,
-            }
-        });
+        const { data } = supabase.storage.from('logos').getPublicUrl(path);
         return data.publicUrl;
     }, [job.logoPath]);
 
@@ -143,7 +137,7 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
     
     const educationText = useMemo(() =>
         job.educationLevels.length > 0
-            ? job.educationLevels.map(level => level.replace('Nível ', '')).join(' / ')
+            ? job.educationLevels.map((level: string) => level.replace('Nível ', '')).join(' / ')
             : null,
     [job.educationLevels]);
 
@@ -189,7 +183,7 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
                 {job.localidade.toUpperCase() === 'NACIONAL' ? (
                     <InfoPill icon={detailIconMap.neighbors} text="Nacional" pillType="location" />
                 ) : (
-                    shouldShowLocationPill && job.mentionedStates?.map(state => <InfoPill key={state} icon={detailIconMap.neighbors} text={state} pillType="location" />)
+                    shouldShowLocationPill && job.mentionedStates?.map((state: string) => <InfoPill key={state} icon={detailIconMap.neighbors} text={state} pillType="location" />)
                 )}
                 {distanceText && <InfoPill icon={<CompassIcon className="h-4 w-4" />} text={distanceText} pillType="distance" />}
                 <InfoPill icon={detailIconMap.salary} text={job.parsedSalary} pillType="salary" />
