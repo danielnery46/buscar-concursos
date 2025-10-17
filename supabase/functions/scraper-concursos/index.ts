@@ -421,11 +421,42 @@ async function scrapeAllJobs() {
   return results.flat();
 }
 
+/**
+ * Identifies the image type by analyzing its "magic numbers" (first few bytes).
+ * @param buffer The ArrayBuffer containing the image data.
+ * @returns An object with the determined contentType and extension, or null if not recognized.
+ */
+function getImageType(buffer: ArrayBuffer): { contentType: string; extension: string } | null {
+    const view = new Uint8Array(buffer);
+    if (view.length < 12) return null; // Not enough data to identify
+
+    // Check for PNG: 89 50 4E 47 0D 0A 1A 0A
+    if (view[0] === 0x89 && view[1] === 0x50 && view[2] === 0x4E && view[3] === 0x47) {
+        return { contentType: 'image/png', extension: 'png' };
+    }
+    // Check for JPEG: FF D8 FF
+    if (view[0] === 0xFF && view[1] === 0xD8 && view[2] === 0xFF) {
+        return { contentType: 'image/jpeg', extension: 'jpg' };
+    }
+    // Check for GIF: 47 49 46 38
+    if (view[0] === 0x47 && view[1] === 0x49 && view[2] === 0x46 && view[3] === 0x38) {
+        return { contentType: 'image/gif', extension: 'gif' };
+    }
+    // Check for WebP: 52 49 46 46 .... 57 45 42 50
+    if (view[0] === 0x52 && view[1] === 0x49 && view[2] === 0x46 && view[3] === 0x46 &&
+        view[8] === 0x57 && view[9] === 0x45 && view[10] === 0x42 && view[11] === 0x50) {
+        return { contentType: 'image/webp', extension: 'webp' };
+    }
+    
+    return null; // Unrecognized format
+}
+
+
 async function processAndUploadLogos(jobs: any[], supabaseAdmin: SupabaseClient, existingJobsMap: Map<string, string | null>) {
     const imageUploadPromises = jobs.map(async (job) => {
         const existingLogoPath = existingJobsMap.get(job.link);
         if (existingLogoPath) {
-            console.log(`Logo for "${job.orgao}" already exists in the database. Skipping download.`);
+            console.log(`Logo for "${job.orgao}" already exists. Skipping.`);
             return { ...job, logoPath: existingLogoPath };
         }
         if (!job.logoUrl) {
@@ -436,12 +467,23 @@ async function processAndUploadLogos(jobs: any[], supabaseAdmin: SupabaseClient,
             if (!imageResponse.ok) {
                 throw new Error(`Failed to fetch logo: ${imageResponse.statusText}`);
             }
+
             const imageBuffer = await imageResponse.arrayBuffer();
+            const imageType = getImageType(imageBuffer);
+
+            if (!imageType) {
+                console.warn(`Could not determine image type for ${job.logoUrl}. Skipping logo.`);
+                return { ...job, logoPath: null };
+            }
+
+            const { contentType, extension } = imageType;
             const normalizedLink = job.link.replace(/[^a-zA-Z0-9]/g, '_');
-            const filePath = `logos/${normalizedLink}.webp`;
+            const filePath = `logos/${normalizedLink}.${extension}`;
+            
             const { error: uploadError } = await supabaseAdmin.storage
                 .from('logos')
-                .upload(filePath, imageBuffer, { contentType: 'image/webp', upsert: true });
+                .upload(filePath, imageBuffer, { contentType, upsert: true });
+
             if (uploadError) {
                 throw uploadError;
             }
@@ -457,9 +499,13 @@ async function processAndUploadLogos(jobs: any[], supabaseAdmin: SupabaseClient,
             return result.value;
         }
         console.error("A logo failed to be processed:", result.reason);
-        return result.reason; 
+        // Return the original job data without logo path on failure
+        // Assuming the reason object might hold the job data for recovery
+        const failedJob = (result.reason as any)?.job || {}; 
+        return { ...failedJob, logoPath: null };
     });
 }
+
 
 // --- Servidor Principal ---
 serve(async (req)=>{
