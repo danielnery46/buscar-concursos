@@ -62,6 +62,7 @@ const App: React.FC = () => {
     });
     const [openFilterPanel, setOpenFilterPanel] = useState<ActiveTab | null>(null);
     const [showConnectionError, setShowConnectionError] = useState(false);
+    const [isInitialAppLoad, setIsInitialAppLoad] = useState(true);
     
     const mainContentRef = useRef<HTMLDivElement>(null);
 
@@ -93,7 +94,13 @@ const App: React.FC = () => {
     }, []);
     
     // General navigation and state management effects
-    useEffect(() => { if (!authLoading && isUserDataLoaded) setActiveTab('search'); }, [authLoading, isUserDataLoaded]);
+    useEffect(() => {
+        if (!authLoading && isUserDataLoaded && isInitialAppLoad) {
+            setActiveTab('search');
+            setIsInitialAppLoad(false);
+        }
+    }, [authLoading, isUserDataLoaded, isInitialAppLoad]);
+    
     useEffect(() => { if (user && activeTab === 'auth' && (authView === 'login' || authView === 'signup')) setActiveTab('search'); }, [user, activeTab, authView]);
     
     // Scroll to top when tab changes

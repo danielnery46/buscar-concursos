@@ -9,7 +9,7 @@ export function InitialLoadErrorDisplay({ title, message }: { title: string; mes
                     <AlertTriangleIcon className="h-8 w-8 text-red-600 dark:text-red-400" />
                 </div>
                 <h2 className="text-2xl font-bold text-red-900 dark:text-gray-100">{title}</h2>
-                <p className="mt-2 text-base text-red-800/90 dark:text-gray-300/80">
+                <p className="mt-2 text-base text-red-800/90 dark:text-gray-300/80 text-justify hyphens-auto">
                     {message}
                 </p>
             </div>
@@ -30,7 +30,7 @@ export const EmptyStateDisplay = memo<{
                     {icon}
                 </div>
                 <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">{title}</h3>
-                <p className="mt-2 text-base text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+                <p className="mt-2 text-base text-gray-600 dark:text-gray-400 max-w-md mx-auto text-justify hyphens-auto">
                     {message}
                 </p>
                 {children && <div className="mt-6">{children}</div>}

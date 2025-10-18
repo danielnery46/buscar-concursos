@@ -229,13 +229,13 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({ onSignOut }) =
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><AtSignIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" /></div>
                                 <input type="email" id="email" value={user?.email || ''} readOnly className="w-full text-base pl-10 pr-3 py-2 border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 rounded-lg shadow-sm focus:outline-none transition-colors cursor-not-allowed" aria-label="E-mail (não pode ser alterado)" />
                             </div>
-                            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Para alterar seu e-mail, exporte seus dados, apague a conta atual e crie uma nova.</p>
+                            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-justify hyphens-auto">Para alterar seu e-mail, exporte seus dados, apague a conta atual e crie uma nova.</p>
                         </div>
                         {/* CEP */}
                         <div>
                             <label htmlFor="cep" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">CEP de Partida</label>
                             <Input id="cep" type="text" value={localCep} onChange={handleCepInputChange} icon={<LocationIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" />} placeholder="00000-000" maxLength={9}/>
-                            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Seu CEP é usado para calcular rotas e será salvo em sua conta.</p>
+                            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-justify hyphens-auto">Seu CEP é usado para calcular rotas e será salvo em sua conta.</p>
                         </div>
                         <div className="flex justify-end pt-2">
                             <Button type="submit" disabled={profileLoading}>

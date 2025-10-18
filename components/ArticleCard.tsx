@@ -121,7 +121,7 @@ export const ArticleCard = memo<ArticleCardProps>(({ item, itemType }) => {
         >
             <div className="flex items-start gap-4">
                 <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors leading-tight line-clamp-3" title={item.title}>
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors leading-tight line-clamp-3 text-justify hyphens-auto" title={item.title}>
                         {item.title}
                     </h3>
                 </div>

@@ -159,8 +159,8 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
                     </div>
                 )}
                 <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors leading-tight" title={job.orgao}>{job.orgao}</h3>
-                    <p className="text-sm text-gray-600 dark:text-slate-400 mt-1" title={job.titulo}>{job.titulo}</p>
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors leading-tight text-justify hyphens-auto" title={job.orgao}>{job.orgao}</h3>
+                    <p className="text-sm text-gray-600 dark:text-slate-400 mt-1 text-justify hyphens-auto" title={job.titulo}>{job.titulo}</p>
                 </div>
                 <div className="flex-shrink-0 text-slate-400 group-hover:text-indigo-400 transition-colors ctrl-key-icon" title="Ver Edital" aria-hidden="true">
                     { openLinksInModal ? (

@@ -54,7 +54,7 @@ export const AppearanceSettings: React.FC<AppearanceSettingsProps> = ({ theme, o
                     <span className="font-semibold text-base text-gray-800 dark:text-gray-200">Tamanho da interface</span>
                     <span className="text-base font-bold text-indigo-600 dark:text-indigo-400">{accessibilitySettings.uiScale || 100}%</span>
                 </label>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Ajuste o zoom geral da aplicação. O padrão é 100%.</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 text-justify hyphens-auto">Ajuste o zoom geral da aplicação. O padrão é 100%.</p>
                 <input id="ui-scale-slider" type="range" min="80" max="130" step="5" value={accessibilitySettings.uiScale} onChange={(e) => onSettingsChange({ uiScale: parseInt(e.target.value, 10) })} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700" />
             </div>
         </div>

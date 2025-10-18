@@ -22,7 +22,7 @@ export function ChangelogModal({ isOpen, onClose }: ModalProps) {
                     containerClasses="max-w-lg max-h-[85vh]"
                 >
                     <main className="p-4 sm:p-6 overflow-y-auto flex-1">
-                        <div className="prose prose-base dark:prose-invert max-w-none">
+                        <div className="prose prose-base dark:prose-invert max-w-none text-justify hyphens-auto">
                             <div className="not-prose p-4 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-500/30 rounded-lg mb-4">
                                 <h3 className="text-lg font-bold text-indigo-800 dark:text-indigo-200">Novidades da versão 2.0</h3>
                                 <ul className="mt-2 space-y-2 list-disc list-outside pl-5 text-indigo-700 dark:text-indigo-300">

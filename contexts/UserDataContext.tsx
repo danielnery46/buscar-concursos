@@ -96,6 +96,7 @@ export const UserDataProvider: FC<UserDataProviderProps> = ({ children }) => {
     const { openModal, closeModal } = useModal();
     const [isUserDataLoaded, setIsUserDataLoaded] = useState(false);
     const prevUserRef = useRef<User | null>(null);
+    const initialLoadCompleted = useRef(false);
 
     const [cidadeRota, setCidadeRota] = useState<string>('');
     const [favoriteSearches, setFavoriteSearches] = useState<SearchCriteria[]>([]);
@@ -109,27 +110,17 @@ export const UserDataProvider: FC<UserDataProviderProps> = ({ children }) => {
     
     useEffect(() => {
         const loadUserData = async () => {
-            if (authLoading) return;
-            
             const isLoggingIn = user && !prevUserRef.current;
             
-            // Verifica se há dados locais modificados pelo usuário que diferem dos padrões do aplicativo.
             const hasNonDefaultLocalData = () => {
                 const isDifferent = (key: string, defaultValue: any) => {
                     const item = localStorage.getItem(key);
-                    // Se a chave não existe, está no estado padrão.
                     if (item === null) return false;
-                    
                     try {
-                        // Se existe, analisa e compara com o padrão.
                         const localValue = JSON.parse(item);
                         return JSON.stringify(localValue) !== JSON.stringify(defaultValue);
                     } catch (e) {
-                        // Trata valores que não são JSON, como a chave do tema.
-                        if (key === THEME_KEY) {
-                            return item !== defaultValue;
-                        }
-                        // Trata erros de parsing como dados modificados.
+                        if (key === THEME_KEY) return item !== defaultValue;
                         return true;
                     }
                 };
@@ -217,9 +208,21 @@ export const UserDataProvider: FC<UserDataProviderProps> = ({ children }) => {
             }
         };
 
+        if (authLoading) {
+            return;
+        }
+        
+        if (initialLoadCompleted.current && user?.id === prevUserRef.current?.id) {
+            return;
+        }
+        
         setIsUserDataLoaded(false);
-        loadUserData();
+        loadUserData().then(() => {
+            initialLoadCompleted.current = true;
+        });
+        
         prevUserRef.current = user;
+
     }, [user, authLoading, openModal, closeModal]);
     
     // Hooks de persistência
