@@ -17,24 +17,6 @@ export const FiltersPanel: React.FC<{
     }, []);
 
     useFocusTrap(isOpen, panelRef, onClose);
-
-    // Efeito para gerenciar o overflow do body e o foco inicial quando o painel abre.
-    useEffect(() => {
-        if (isOpen) {
-            const originalOverflow = document.body.style.overflow;
-            document.body.style.overflow = 'hidden';
-
-            const timerId = setTimeout(() => {
-                // Foca no primeiro elemento focável.
-                panelRef.current?.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')?.focus();
-            }, 100);
-
-            return () => {
-                clearTimeout(timerId);
-                document.body.style.overflow = originalOverflow;
-            };
-        }
-    }, [isOpen]);
     
     const transitionClasses = isMounted ? 'transition-transform duration-300 ease-in-out' : '';
     const transformClasses = isOpen

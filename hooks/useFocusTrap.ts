@@ -2,79 +2,104 @@ import { useEffect, useRef } from 'react';
 import type React from 'react';
 
 /**
- * Um hook customizado para prender o foco dentro de um modal ou diálogo quando ele está aberto.
- * @param isOpen - Booleano indicando se o modal está aberto.
- * @param modalRef - Ref object para o elemento container do modal.
- * @param handleClose - Função a ser chamada quando a tecla Escape é pressionada.
- * @param disableInitialFocus - Opcional, previne o foco automático no primeiro elemento. Se true, foca o container do modal.
+ * A custom hook to trap focus within a modal/dialog when open.
+ * Handles initial focus, tab trapping, Escape key, restoring focus on close, and body scroll prevention.
+ * @param isOpen - Boolean indicating if the modal is open.
+ * @param containerRef - Ref object for the modal container element.
+ * @param handleClose - Function to call when the Escape key is pressed.
+ * @param disableInitialFocus - Optional, prevents automatic focus on the first element.
  */
 export const useFocusTrap = (
-    isOpen: boolean, 
-    modalRef: React.RefObject<HTMLElement>, 
+    isOpen: boolean,
+    containerRef: React.RefObject<HTMLElement>,
     handleClose: () => void,
     disableInitialFocus = false
 ) => {
     const triggerElementRef = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
-      if (!isOpen || !modalRef.current) return;
-
-      if (document.activeElement instanceof HTMLElement) {
-        triggerElementRef.current = document.activeElement;
-      }
-      
-      const focusableElements = Array.from(modalRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      ));
-      
-      const firstElement = focusableElements.length > 0 ? focusableElements[0] : null;
-      const lastElement = focusableElements.length > 0 ? focusableElements[focusableElements.length - 1] : null;
-      
-      // Define o foco inicial
-      if (!disableInitialFocus && firstElement) {
-        // FIX: Explicitly cast to HTMLElement to ensure the `focus` method is available.
-        (firstElement as HTMLElement).focus();
-      } else if (modalRef.current) {
-        modalRef.current.focus({ preventScroll: true });
-      }
-
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') {
-            handleClose();
+        if (!isOpen) {
             return;
         }
+
+        const modal = containerRef.current;
+        if (!modal) {
+            return;
+        }
+
+        // 1. Armazena o elemento que tinha o foco antes de abrir
+        if (document.activeElement instanceof HTMLElement) {
+            triggerElementRef.current = document.activeElement;
+        }
         
-        if (event.key === 'Tab' && focusableElements.length > 0) {
-          if (!modalRef.current?.contains(document.activeElement)) {
-              // FIX: Explicitly cast to HTMLElement to ensure the `focus` method is available.
-              (firstElement as HTMLElement)?.focus();
-              event.preventDefault();
-              return;
-          }
+        // 2. Previne o scroll do body
+        const originalOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
 
-          if (event.shiftKey) { // Shift + Tab
-            if (document.activeElement === firstElement) {
-              // FIX: Explicitly cast to HTMLElement to ensure the `focus` method is available.
-              (lastElement as HTMLElement)?.focus();
-              event.preventDefault();
-            }
-          } else { // Tab
-            if (document.activeElement === lastElement) {
-              // FIX: Explicitly cast to HTMLElement to ensure the `focus` method is available.
-              (firstElement as HTMLElement)?.focus();
-              event.preventDefault();
-            }
-          }
-        }
-      };
+        // 3. Obtém todos os elementos focáveis visíveis
+        const focusableElements = Array.from(
+            modal.querySelectorAll<HTMLElement>(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+            )
+        // FIX: Use a type guard to ensure elements are HTMLElements and correctly type the filtered array.
+        ).filter((el): el is HTMLElement => el instanceof HTMLElement && el.offsetParent !== null);
 
-      document.addEventListener('keydown', handleKeyDown);
-      
-      return () => {
-        document.removeEventListener('keydown', handleKeyDown);
-        if (triggerElementRef.current) {
-            triggerElementRef.current.focus();
-        }
-      };
-    }, [isOpen, modalRef, handleClose, disableInitialFocus]);
+        const firstElement = focusableElements.length > 0 ? focusableElements[0] : null;
+        const lastElement = focusableElements.length > 0 ? focusableElements[focusableElements.length - 1] : null;
+
+        // 4. Define o foco inicial após um pequeno atraso para permitir transições
+        const timerId = setTimeout(() => {
+            if (!disableInitialFocus && firstElement) {
+                firstElement.focus();
+            } else if (modal) { // Foca o container se não houver elementos ou se o foco inicial estiver desabilitado
+                modal.setAttribute('tabindex', '-1'); // Garante que o container possa ser focado
+                modal.focus({ preventScroll: true });
+            }
+        }, 50);
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                handleClose();
+                return;
+            }
+
+            if (event.key === 'Tab') {
+                if (focusableElements.length <= 1) {
+                    event.preventDefault(); // Impede a navegação se houver apenas um ou nenhum elemento focável
+                    return;
+                }
+                
+                // Se o foco escapou do modal, força-o a voltar para dentro
+                if (!modal.contains(document.activeElement)) {
+                    firstElement?.focus();
+                    event.preventDefault();
+                    return;
+                }
+
+                if (event.shiftKey) { // Shift + Tab
+                    if (document.activeElement === firstElement) {
+                        lastElement?.focus();
+                        event.preventDefault();
+                    }
+                } else { // Tab
+                    if (document.activeElement === lastElement) {
+                        firstElement?.focus();
+                        event.preventDefault();
+                    }
+                }
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+
+        // 5. Limpeza ao desmontar ou quando `isOpen` se torna falso
+        return () => {
+            clearTimeout(timerId);
+            document.removeEventListener('keydown', handleKeyDown);
+            document.body.style.overflow = originalOverflow;
+            
+            // 6. Restaura o foco para o elemento que acionou o modal
+            triggerElementRef.current?.focus();
+        };
+    }, [isOpen, containerRef, handleClose, disableInitialFocus]);
 };

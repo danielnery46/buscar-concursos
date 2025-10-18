@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { ProcessedPredictedJob, PredictedCriteria, AccessibilitySettings } from '../types';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { PredictedCriteria, AccessibilitySettings } from '../types';
 import { formatPredictedCriteria } from '../utils/formatters';
 import { FilterIcon, SearchOffIcon } from './Icons';
 import { CategorizedSearchForm } from './PredictedNewsSearchForm';
@@ -30,7 +30,8 @@ interface ArticleListPageProps {
     onFilterCountChange: (count: number) => void;
     isUserDataLoaded: boolean;
     table: 'predicted_openings' | 'news_articles';
-    allArticles: ProcessedPredictedJob[];
+    availableSources: string[];
+    isActive: boolean;
 }
 
 const ITEMS_PER_PAGE_ARTICLES = 12;
@@ -52,7 +53,8 @@ export const ArticleListPage: React.FC<ArticleListPageProps> = ({
     onFilterCountChange,
     isUserDataLoaded,
     table,
-    allArticles,
+    availableSources,
+    isActive,
 }) => {
     const [page, setPage] = useState(1);
     const {
@@ -63,21 +65,21 @@ export const ArticleListPage: React.FC<ArticleListPageProps> = ({
         totalItems,
         isLoading,
         error,
-    } = useArticleSearch(table, defaultFilter, isUserDataLoaded, page, ITEMS_PER_PAGE_ARTICLES);
+    } = useArticleSearch(table, defaultFilter, isUserDataLoaded, page, ITEMS_PER_PAGE_ARTICLES, isActive);
     
+    const prevIsActive = useRef(isActive);
+    useEffect(() => {
+        prevIsActive.current = isActive;
+    });
+    // This helps prevent a flicker of the "empty state" when a tab becomes active
+    // before the loading state from the hook has propagated.
+    const isJustActivated = isActive && !prevIsActive.current;
+
     const animationKey = useMemo(() => `${page}-${JSON.stringify(debouncedCriteria)}`, [page, debouncedCriteria]);
     
     useEffect(() => {
         onFilterCountChange(calculatePredictedFilters(criteria));
     }, [criteria, onFilterCountChange]);
-
-    const availableSources = useMemo(() => {
-        const sources = new Set<string>();
-        allArticles.forEach(item => {
-            if (item.source) sources.add(item.source);
-        });
-        return Array.from(sources).sort();
-    }, [allArticles]);
 
     useEffect(() => {
         setPage(1);
@@ -137,7 +139,7 @@ export const ArticleListPage: React.FC<ArticleListPageProps> = ({
                         formatItem={formatPredictedCriteria}
                         accessibilitySettings={accessibilitySettings}
                     />
-                    {isLoading && filteredItems.length === 0 ? (
+                    {isLoading || isJustActivated ? (
                         <div className="flex-grow flex items-center justify-center p-4">
                             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-500"></div>
                         </div>

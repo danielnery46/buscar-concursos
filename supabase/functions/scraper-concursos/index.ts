@@ -18,6 +18,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { DOMParser, Element } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { Database } from "../database.types.ts";
 
 // Declara Deno para resolver erros de TypeScript em ambientes não-Deno.
 declare const Deno: any;
@@ -452,7 +453,7 @@ function getImageType(buffer: ArrayBuffer): { contentType: string; extension: st
 }
 
 
-async function processAndUploadLogos(jobs: any[], supabaseAdmin: SupabaseClient, existingJobsMap: Map<string, string | null>) {
+async function processAndUploadLogos(jobs: any[], supabaseAdmin: SupabaseClient<Database>, existingJobsMap: Map<string, string | null>) {
     const imageUploadPromises = jobs.map(async (job) => {
         const existingLogoPath = existingJobsMap.get(job.link);
         if (existingLogoPath) {
@@ -523,7 +524,7 @@ serve(async (req)=>{
         throw new Error(`SECURITY SAFEGUARD: Scraping returned only ${allJobsRaw.length} jobs, which is below the threshold of ${MINIMUM_JOBS_THRESHOLD}. Aborting run to prevent data loss.`);
     }
     
-    const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+    const supabaseAdmin: SupabaseClient<Database> = createClient<Database>(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
 
     const scrapedLinks = allJobsRaw.map(job => job.link);
     console.log(`Scraped ${scrapedLinks.length} links. Checking for existing jobs in the database in chunks...`);

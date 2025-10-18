@@ -19,6 +19,7 @@ import { supabase } from '../utils/supabase';
 // Import normalizeText from its dedicated module.
 import { normalizeText } from '../utils/text';
 import { ESTADOS_POR_REGIAO, VIZINHANCAS_ESTADOS } from '../constants';
+import { retryAsync } from '../utils/helpers';
 
 const JOB_OPENINGS_LIST_COLUMNS = 'title, organization, location, link, effective_city, logo_path, deadline_formatted, deadline_date, type, normalized_effective_city, max_salary_numeric, min_salary_numeric, vacancies_numeric, education_levels, parsed_salary_text, parsed_vacancies_text, mentioned_states';
 const PREDICTED_ARTICLES_COLUMNS = 'id, publication_date, title, link, source, mentioned_states';
@@ -58,8 +59,8 @@ const predictedJobMapper = (item: any): ProcessedPredictedJob => {
     };
 };
 
-function buildBaseJobQuery(criteria: SearchCriteria, signal?: AbortSignal) {
-    let query = supabase.from('job_openings').select(JOB_OPENINGS_LIST_COLUMNS, { count: 'exact' });
+function buildBaseJobQuery(selectString: string, criteria: SearchCriteria, signal?: AbortSignal) {
+    let query = supabase.from('job_openings').select(selectString, { count: 'exact' });
     if (signal) {
         query = query.abortSignal(signal);
     }
@@ -115,69 +116,170 @@ function buildBaseJobQuery(criteria: SearchCriteria, signal?: AbortSignal) {
 
 export async function fetchJobs(criteria: SearchCriteria, page: number, pageSize: number, type: 'concurso' | 'processo_seletivo' | 'all', signal?: AbortSignal) {
     const isDistanceSearch = criteria.distanciaRaio && criteria.cidadeFiltro && criteria.estado.length === 2;
-    let query = buildBaseJobQuery(criteria, signal);
+    let query = buildBaseJobQuery(JOB_OPENINGS_LIST_COLUMNS, criteria, signal);
     
     if (type !== 'all') {
         query = query.eq('type', type);
     }
 
-    const { sort } = criteria;
-    if (sort.startsWith('alpha')) query = query.order('organization', { ascending: sort === 'alpha-asc' });
-    else if (sort.startsWith('salary')) query = query.order('max_salary_numeric', { ascending: sort === 'salary-asc', nullsFirst: false });
-    else if (sort.startsWith('vacancies')) query = query.order('vacancies_numeric', { ascending: sort === 'vacancies-asc', nullsFirst: false });
-    else if (sort.startsWith('deadline')) query = query.order('deadline_date', { ascending: sort === 'deadline-asc', nullsFirst: false });
-    
+    // Do not sort on the DB for distance search, as it will be sorted client-side later
     if (!isDistanceSearch) {
+        const { sort } = criteria;
+        if (sort.startsWith('alpha')) query = query.order('organization', { ascending: sort === 'alpha-asc' });
+        else if (sort.startsWith('salary')) query = query.order('max_salary_numeric', { ascending: sort === 'salary-asc', nullsFirst: false });
+        else if (sort.startsWith('vacancies')) query = query.order('vacancies_numeric', { ascending: sort === 'vacancies-asc', nullsFirst: false });
+        else if (sort.startsWith('deadline')) query = query.order('deadline_date', { ascending: sort === 'deadline-asc', nullsFirst: false });
+    }
+
+    try {
+        // Special handling for distance search to fetch a limited number of results for client-side filtering.
+        if (isDistanceSearch) {
+            const DISTANCE_SEARCH_FETCH_LIMIT = 2000; // Limit to prevent timeouts on very broad searches
+            let allData: any[] = [];
+            let offset = 0;
+            const limit = 1000; // Supabase client limit
+            let hasMore = true;
+
+            while (hasMore && allData.length < DISTANCE_SEARCH_FETCH_LIMIT) {
+                if (signal?.aborted) throw new Error("The operation was aborted.");
+
+                // Add retry logic to each chunk fetch
+                const { data, error, count } = await retryAsync(async () => {
+                    const result = await query.range(offset, offset + limit - 1);
+                    if (result.error) throw result.error;
+                    return result;
+                }, 3, 200);
+
+                if (error) throw error;
+                
+                if (data && data.length > 0) {
+                    allData = allData.concat(data);
+                    offset += data.length;
+                }
+                
+                // If count is available and we've fetched all, or if last fetch was short, stop.
+                if (!data || data.length < limit || (count !== null && offset >= count)) {
+                    hasMore = false;
+                }
+            }
+            
+            if (allData.length >= DISTANCE_SEARCH_FETCH_LIMIT) {
+                console.warn(`Distance search fetch limit of ${DISTANCE_SEARCH_FETCH_LIMIT} reached. Results may be incomplete.`);
+            }
+
+            const jobs = allData.map(jobMapper);
+            // The count is the number of jobs that will be filtered on the client.
+            return { jobs, count: jobs.length };
+        }
+
+        // Standard paginated search for regular queries.
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
         query = query.range(from, to);
-    }
 
-    const { data, error, count } = await query;
-    if (error) {
+        const { data, count } = await retryAsync(async () => {
+            const { data, error, count } = await query;
+            if (error) throw error;
+            return { data, count };
+        }, 3, 500);
+
+        const jobs = (data || []).map(jobMapper);
+        return { jobs, count: count ?? 0 };
+    } catch (error: any) {
         const isAbortError = error.name === 'AbortError' || (error.message && error.message.includes('The operation was aborted'));
         if (isAbortError) {
-            // Re-throw as a standard AbortError so calling hooks can catch it reliably.
             const abortErr = new Error("The operation was aborted.");
             abortErr.name = "AbortError";
             throw abortErr;
         }
-        console.error(`Error fetching jobs (type: ${type}):`, error);
-        throw new Error(`Failed to fetch jobs`);
-    }
 
-    const jobs = (data || []).map(jobMapper);
-    return { jobs, count: count ?? 0 };
+        const lowerCaseMessage = (error.message || '').toLowerCase();
+        if (lowerCaseMessage.includes('networkerror') || lowerCaseMessage.includes('failed to fetch')) {
+            window.dispatchEvent(new CustomEvent('networkError'));
+        }
+
+        console.error(`Error fetching jobs (type: ${type}) after retries:`, error);
+        
+        let userMessage = 'Falha ao buscar vagas. Verifique sua conexão e tente novamente.';
+        if (error.message && error.message.toLowerCase().includes('statement timeout')) {
+            userMessage = 'A busca demorou demais para responder. Tente usar filtros mais específicos para refinar sua pesquisa.';
+        }
+
+        throw new Error(userMessage);
+    }
 }
 
 export async function fetchJobsSummary(criteria: SearchCriteria, signal?: AbortSignal) {
-    let query = buildBaseJobQuery(criteria, signal);
-    const { data, error, count } = await query;
+    // Only select columns needed for summary to optimize payload
+    let query = buildBaseJobQuery('vacancies_numeric, max_salary_numeric', criteria, signal);
+    
+    try {
+        // Fetch all results in chunks to avoid timeout or memory issues on large queries.
+        let allData: any[] = [];
+        let offset = 0;
+        const limit = 1000; // Supabase client limit
+        let hasMore = true;
+        let totalCount: number | null = null;
 
-    if (error) {
+        while (hasMore) {
+            if (signal?.aborted) throw new Error("The operation was aborted.");
+
+            const { data, error, count } = await retryAsync(async () => {
+                const result = await query.range(offset, offset + limit - 1);
+                if (result.error) throw result.error;
+                return result;
+            }, 3, 200);
+            
+            if (error) throw error;
+            
+            if (offset === 0) {
+                totalCount = count;
+            }
+
+            if (data && data.length > 0) {
+                allData = allData.concat(data);
+                offset += data.length;
+            }
+
+            if (!data || data.length < limit || (totalCount !== null && offset >= totalCount)) {
+                hasMore = false;
+            }
+        }
+
+        const summary = allData.reduce(
+            (acc, job) => {
+                acc.totalVacancies += Number(job.vacancies_numeric) || 0;
+                if ((Number(job.max_salary_numeric) || 0) > acc.highestSalary) {
+                    acc.highestSalary = Number(job.max_salary_numeric) || 0;
+                }
+                return acc;
+            },
+            { totalVacancies: 0, highestSalary: 0 }
+        );
+
+        return { totalOpportunities: totalCount ?? 0, ...summary };
+    } catch (error: any) {
         const isAbortError = error.name === 'AbortError' || (error.message && error.message.includes('The operation was aborted'));
         if (isAbortError) {
-            // Re-throw as a standard AbortError so calling hooks can catch it reliably.
             const abortErr = new Error("The operation was aborted.");
             abortErr.name = "AbortError";
             throw abortErr;
         }
-        console.error('Error fetching jobs summary:', error);
-        throw new Error('Failed to fetch jobs summary');
+
+        const lowerCaseMessage = (error.message || '').toLowerCase();
+        if (lowerCaseMessage.includes('networkerror') || lowerCaseMessage.includes('failed to fetch')) {
+            window.dispatchEvent(new CustomEvent('networkError'));
+        }
+
+        console.error('Error fetching jobs summary after retries:', error);
+        
+        let userMessage = 'Falha ao buscar o resumo das vagas. Verifique sua conexão.';
+        if (error.message && error.message.toLowerCase().includes('statement timeout')) {
+            userMessage = 'O cálculo do resumo demorou demais. Tente usar filtros mais específicos.';
+        }
+        
+        throw new Error(userMessage);
     }
-
-    const summary = (data || []).reduce(
-        (acc, job) => {
-            acc.totalVacancies += Number(job.vacancies_numeric) || 0;
-            if ((Number(job.max_salary_numeric) || 0) > acc.highestSalary) {
-                acc.highestSalary = Number(job.max_salary_numeric) || 0;
-            }
-            return acc;
-        },
-        { totalVacancies: 0, highestSalary: 0 }
-    );
-
-    return { totalOpportunities: count ?? 0, ...summary };
 }
 
 export async function fetchArticles(table: 'predicted_openings' | 'news_articles', criteria: PredictedCriteria, page: number, pageSize: number, signal?: AbortSignal) {
@@ -230,27 +332,58 @@ export async function fetchArticles(table: 'predicted_openings' | 'news_articles
     const to = from + pageSize - 1;
     query = query.range(from, to);
 
-    const { data, error, count } = await query;
-    if (error) {
+    try {
+        const { data, count } = await retryAsync(async () => {
+            const { data, error, count } = await query;
+            if (error) throw error;
+            return { data, count };
+        }, 3, 500);
+
+        const items = (data || []).map(predictedJobMapper);
+        
+        // A ordenação final por data real é feita no lado do cliente para a página atual.
+        items.sort((a, b) => {
+            const timeA = a.dateObject.getTime();
+            const timeB = b.dateObject.getTime();
+            return sort === 'date-asc' ? timeA - timeB : timeB - a.dateObject.getTime();
+        });
+
+        return { items, count: count ?? 0 };
+    } catch (error: any) {
         const isAbortError = error.name === 'AbortError' || (error.message && error.message.includes('The operation was aborted'));
         if (isAbortError) {
-            // Re-throw as a standard AbortError so calling hooks can catch it reliably.
             const abortErr = new Error("The operation was aborted.");
             abortErr.name = "AbortError";
             throw abortErr;
         }
-        console.error(`Error fetching articles from ${table}:`, error);
-        throw new Error(`Failed to fetch articles from ${table}`);
+
+        const lowerCaseMessage = (error.message || '').toLowerCase();
+        if (lowerCaseMessage.includes('networkerror') || lowerCaseMessage.includes('failed to fetch')) {
+            window.dispatchEvent(new CustomEvent('networkError'));
+        }
+
+        console.error(`Error fetching articles from ${table} after retries:`, error);
+        
+        let userMessage = `Falha ao buscar os artigos. Verifique sua conexão.`;
+        if (error.message && error.message.toLowerCase().includes('statement timeout')) {
+            userMessage = 'A busca demorou demais para responder. Tente usar filtros mais específicos para refinar sua pesquisa.';
+        }
+
+        throw new Error(userMessage);
     }
+}
 
-    const items = (data || []).map(predictedJobMapper);
-    
-    // A ordenação final por data real é feita no lado do cliente para a página atual.
-    items.sort((a, b) => {
-        const timeA = a.dateObject.getTime();
-        const timeB = b.dateObject.getTime();
-        return sort === 'date-asc' ? timeA - timeB : timeB - a.dateObject.getTime();
-    });
-
-    return { items, count: count ?? 0 };
+export async function fetchSourcesForTable(table: 'predicted_openings' | 'news_articles'): Promise<string[]> {
+    const { data, error } = await supabase.from(table).select('source');
+    if (error) {
+        const lowerCaseMessage = (error.message || '').toLowerCase();
+        if (lowerCaseMessage.includes('networkerror') || lowerCaseMessage.includes('failed to fetch')) {
+            window.dispatchEvent(new CustomEvent('networkError'));
+        }
+        console.error(`Error fetching sources from ${table}:`, error);
+        return [];
+    }
+    // Use um Set para obter fontes únicas e depois converta para um array
+    const sources = new Set<string>(data.map((item: any) => item.source).filter(Boolean));
+    return Array.from(sources).sort();
 }

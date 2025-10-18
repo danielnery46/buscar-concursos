@@ -156,7 +156,9 @@ Esta mensagem foi pré-formatada pelo formulário de contato do site.
                         <CardTitle className="text-xl sm:text-2xl">Fale Conosco</CardTitle>
                     </CardHeader>
                     <CardContent className="pt-0">
-                        <p className="text-base text-gray-600 dark:text-gray-400 mb-4 text-justify hyphens-auto">Se não encontrou sua resposta, envie-nos uma mensagem. O formulário abaixo irá preparar um e-mail para ser enviado através do seu aplicativo de e-mail padrão.</p>
+                        <p className="text-base text-gray-600 dark:text-gray-400 mb-6 text-justify hyphens-auto">
+                            Se não encontrou sua resposta, envie-nos uma mensagem. O formulário abaixo irá preparar um e-mail para ser enviado através do seu aplicativo de e-mail padrão. Se preferir, você também pode entrar em contato diretamente pelo e-mail <a href="mailto:suporte@buscarconcursos.com.br" className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">suporte@buscarconcursos.com.br</a>.
+                        </p>
                         <form onSubmit={handleSubmit} className="space-y-4">
                             {formStatus === 'error' && <Alert type="error" message="Por favor, preencha todos os campos corretamente." />}
                             {formStatus === 'success' && <Alert type="success" message="Seu cliente de e-mail deve abrir em instantes. Obrigado pelo contato!" />}

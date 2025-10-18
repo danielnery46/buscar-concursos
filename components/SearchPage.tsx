@@ -7,7 +7,6 @@ import { ActiveFiltersDisplay } from './ActiveFiltersDisplay';
 import { FiltersPanel } from './FiltersPanel';
 import { useSettings } from '../contexts/SettingsContext';
 import { useUserData } from '../contexts/UserDataContext';
-import { useAppData } from '../hooks/useAppData';
 import { useJobSearch, calculateActiveFilters } from '../hooks/useJobSearch';
 import { formatSearchCriteria } from '../utils/formatters';
 import { InitialLoadErrorDisplay } from './StateDisplays';
@@ -16,26 +15,27 @@ const ITEMS_PER_PAGE = 12;
 
 interface SearchPageProps {
     cityDataCache: Record<string, City[]>;
+    loadCitiesForState: (state: string) => Promise<Record<string, City[]>>;
     isFiltersOpen: boolean;
     setIsFiltersOpen: (isOpen: boolean) => void;
     mainContentRef: React.RefObject<HTMLDivElement>;
     onFilterCountChange: (count: number) => void;
+    isActive: boolean;
 }
 
 const SearchPage: React.FC<SearchPageProps> = ({
-    cityDataCache: initialCityDataCache,
+    cityDataCache,
+    loadCitiesForState,
     isFiltersOpen,
     setIsFiltersOpen,
     mainContentRef,
-    onFilterCountChange
+    onFilterCountChange,
+    isActive
 }) => {
     const { accessibilitySettings } = useSettings();
     const { favoriteSearches, defaultSearch, isUserDataLoaded } = useUserData();
-    const { loadCitiesForState } = useAppData();
-
-    const [cityDataCache, setCityDataCache] = useState(initialCityDataCache);
-    const [isCityDataLoading, setIsCityDataLoading] = useState(false);
     
+    const [isCityDataLoading, setIsCityDataLoading] = useState(false);
     const [concursosPage, setConcursosPage] = useState(1);
     const [processosPage, setProcessosPage] = useState(1);
     
@@ -50,7 +50,7 @@ const SearchPage: React.FC<SearchPageProps> = ({
         summaryData,
         isLoading,
         error,
-    } = useJobSearch(cityDataCache, defaultSearch, isUserDataLoaded, concursosPage, processosPage, ITEMS_PER_PAGE);
+    } = useJobSearch(cityDataCache, defaultSearch, isUserDataLoaded, isCityDataLoading, concursosPage, processosPage, ITEMS_PER_PAGE, isActive);
     
     const [formKey, setFormKey] = useState(0);
     const [targetTab, setTargetTab] = useState<'concursos' | 'processos_seletivos' | null>(null);
@@ -60,6 +60,9 @@ const SearchPage: React.FC<SearchPageProps> = ({
     }, [criteria, onFilterCountChange]);
 
     useEffect(() => {
+        // Guard para esperar a inicialização dos critérios
+        if (!criteria) return;
+
         const state = criteria.estado;
         if (state.length === 2 && !cityDataCache[state.toUpperCase()]) {
             const statesToLoad = [state.toUpperCase()];
@@ -70,14 +73,12 @@ const SearchPage: React.FC<SearchPageProps> = ({
             if (unloadedStates.length > 0) {
                 setIsCityDataLoading(true);
                 Promise.all(unloadedStates.map(s => loadCitiesForState(s)))
-                    .then(newCaches => {
-                        const mergedCache = newCaches.reduce((acc, current) => ({ ...acc, ...current }), {});
-                        setCityDataCache(prevCache => ({ ...prevCache, ...mergedCache }));
-                    })
                     .finally(() => setIsCityDataLoading(false));
             }
         }
-    }, [criteria.estado, criteria.incluirVizinhos, cityDataCache, loadCitiesForState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [criteria, cityDataCache]);
+
 
     useEffect(() => {
         setConcursosPage(1);
@@ -91,6 +92,7 @@ const SearchPage: React.FC<SearchPageProps> = ({
 
     const handleClearSingleFilter = useCallback((key: keyof SearchCriteria, value?: string) => {
         setCriteria(prev => {
+            if (!prev) return systemDefaultValues;
             const newCriteria: SearchCriteria = { ...prev };
             if (key === 'escolaridade' && value) {
                 newCriteria.escolaridade = newCriteria.escolaridade.filter(level => level !== value);

@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, FC } from 'react';
-import type { Theme, AccessibilitySettings } from '../types';
+import type { Theme, AccessibilitySettings, Json } from '../types';
 import { useAuth } from './AuthContext';
 import { supabase } from '../utils/supabase';
 import { useDebounce } from '../hooks/useDebounce';
@@ -89,8 +89,8 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
             const { data, error } = await supabase.from('user_data').select('theme, accessibility_settings').eq('id', user.id).single();
             if (error && error.code !== 'PGRST116') console.error('Error fetching settings:', error);
             
-            _setTheme(data?.theme || 'auto');
-            setAccessibilitySettings(data?.accessibility_settings || defaultSettings);
+            _setTheme((data?.theme as Theme) || 'auto');
+            setAccessibilitySettings((data?.accessibility_settings as unknown as AccessibilitySettings) ?? defaultSettings);
         } else {
             _setTheme(localStorage.getItem(THEME_KEY) as Theme || 'auto');
             setAccessibilitySettings(JSON.parse(localStorage.getItem(ACCESSIBILITY_SETTINGS_KEY) || 'null') || defaultSettings);
@@ -122,13 +122,13 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
 
             // Merge with local data taking precedence for settings.
             const mergedTheme = localTheme && localTheme !== 'auto' ? localTheme : (cloudData?.theme || 'auto');
-            const mergedSettings = { ...defaultSettings, ...(cloudData?.accessibility_settings || {}), ...(localSettings || {}) };
+            const mergedSettings = { ...defaultSettings, ...(cloudData?.accessibility_settings as object || {}), ...(localSettings || {}) };
             
-            _setTheme(mergedTheme);
+            _setTheme(mergedTheme as Theme);
             setAccessibilitySettings(mergedSettings);
         } else { // discard
-            _setTheme(cloudData?.theme || 'auto');
-            setAccessibilitySettings(cloudData?.accessibility_settings || defaultSettings);
+            _setTheme((cloudData?.theme as Theme) || 'auto');
+            setAccessibilitySettings((cloudData?.accessibility_settings as unknown as AccessibilitySettings) ?? defaultSettings);
         }
         
         settingsKeys.forEach(key => localStorage.removeItem(key));
@@ -160,7 +160,7 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
     if (!isSettingsLoaded) return;
     const saveAccessibilitySettings = async () => {
         if (user) {
-            const { error } = await supabase.from('user_data').upsert({ id: user.id, accessibility_settings: debouncedAccessibilitySettings });
+            const { error } = await supabase.from('user_data').upsert({ id: user.id, accessibility_settings: debouncedAccessibilitySettings as unknown as Json });
             if (error) console.error('Error saving accessibility settings:', error);
         } else {
             localStorage.setItem(ACCESSIBILITY_SETTINGS_KEY, JSON.stringify(debouncedAccessibilitySettings));

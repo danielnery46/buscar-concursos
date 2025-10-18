@@ -67,7 +67,7 @@ export const ResultsList = memo(function ResultsList(props: ResultsListProps) {
     const activePage = activeTab === 'concursos' ? concursosPage : processosPage;
     const activeSetPage = activeTab === 'concursos' ? setConcursosPage : setProcessosPage;
 
-    if (isLoading && totalConcursos === 0 && totalProcessos === 0) {
+    if (isLoading) {
         return (
             <div className="flex-grow flex items-center justify-center p-4">
                 <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-500"></div>

@@ -104,3 +104,37 @@ export function sortJobs(jobs: ProcessedJob[], sort: OpenJobsSortOption): Proces
 
     return sortedJobs;
 }
+
+
+/**
+ * Retries an async operation with exponential backoff.
+ * @param operation The async function to execute.
+ * @param maxRetries The maximum number of retries.
+ * @param delayMs The initial delay in milliseconds.
+ * @returns A promise that resolves with the result of the operation.
+ */
+export async function retryAsync<T>(
+    operation: () => Promise<T>,
+    maxRetries: number,
+    delayMs: number
+): Promise<T> {
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await operation();
+        } catch (error: any) {
+            lastError = error;
+            // Do not retry if the request was aborted by the user
+            if (error?.name === 'AbortError' || error?.message?.includes('The operation was aborted')) {
+                throw error;
+            }
+            console.warn(`Attempt ${attempt} of ${maxRetries} failed: ${error?.message || 'Unknown error'}`);
+            if (attempt < maxRetries) {
+                const delay = delayMs * Math.pow(2, attempt - 1);
+                console.log(`Waiting ${delay / 1000}s before retrying...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+    throw lastError;
+}

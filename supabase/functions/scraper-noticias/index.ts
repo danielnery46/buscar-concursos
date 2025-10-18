@@ -18,6 +18,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { DOMParser, Element } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { Database } from "../database.types.ts";
 
 // Declare Deno to resolve TypeScript errors in non-Deno environments.
 declare const Deno: any;
@@ -340,7 +341,7 @@ serve(async (req)=>{
   });
   try {
     console.log("Iniciando scraping incremental de notícias...");
-    const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+    const supabaseAdmin = createClient<Database>(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
 
     // Busca todos os links existentes para evitar reprocessamento
     const { data: existingLinksData, error: fetchError } = await supabaseAdmin

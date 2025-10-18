@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { City } from '../types';
+import { supabaseUrl } from '../utils/supabase';
 
 export const useAppData = () => {
     const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -12,7 +13,7 @@ export const useAppData = () => {
             return Promise.resolve({ [stateUpper]: cityDataCache[stateUpper] });
         }
         try {
-            const res = await fetch(`https://mszhxzuwyrclefajafjt.supabase.co/storage/v1/object/public/static-assets/cities/${stateUpper}.json`);
+            const res = await fetch(`${supabaseUrl}/storage/v1/object/public/static-assets/cities/${stateUpper}.json`);
             if (!res.ok) throw new Error(`Failed to load cities for ${stateUpper}`);
             const data = await res.json();
             const newCache = { [stateUpper]: data };
@@ -32,7 +33,7 @@ export const useAppData = () => {
                 // Pré-carrega as cidades mais comuns para uma melhor experiência inicial
                 const commonStates = ['SP', 'MG', 'RJ', 'BA', 'PR'];
                 const cityPromises = commonStates.map(state => 
-                    fetch(`https://mszhxzuwyrclefajafjt.supabase.co/storage/v1/object/public/static-assets/cities/${state}.json`).then(res => {
+                    fetch(`${supabaseUrl}/storage/v1/object/public/static-assets/cities/${state}.json`).then(res => {
                         if (!res.ok) throw new Error(`Failed to load cities for ${state}`);
                         return res.json();
                     }).catch(() => [])

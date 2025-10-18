@@ -16,6 +16,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { Database } from "../database.types.ts";
 
 // Declare Deno to resolve TypeScript errors in non-Deno environments.
 declare const Deno: any;
@@ -39,7 +40,7 @@ serve(async (req: Request) => {
 
   try {
     // 1. Create a Supabase client with the Auth context of the user making the request.
-    const supabaseClient: SupabaseClient = createClient(
+    const supabaseClient: SupabaseClient<Database> = createClient<Database>(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       { global: { headers: { Authorization: req.headers.get("Authorization")! } } }
@@ -55,7 +56,7 @@ serve(async (req: Request) => {
     }
 
     // 3. Create a Supabase admin client to perform privileged operations.
-    const supabaseAdmin = createClient(
+    const supabaseAdmin = createClient<Database>(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );

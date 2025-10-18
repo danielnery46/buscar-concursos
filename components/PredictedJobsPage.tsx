@@ -1,25 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { ProcessedPredictedJob } from '../types';
 import { ArticleListPage } from './ArticleListPage';
 import { BellIcon } from './Icons';
 import { useSettings } from '../contexts/SettingsContext';
 import { useUserData } from '../contexts/UserDataContext';
-import { supabase } from '../utils/supabase';
-
-const fetchAllArticlesForSources = async (table: 'predicted_openings' | 'news_articles'): Promise<ProcessedPredictedJob[]> => {
-    const { data, error } = await supabase.from(table).select('source');
-    if (error) {
-        console.error(`Error fetching sources from ${table}:`, error);
-        return [];
-    }
-    return data as ProcessedPredictedJob[];
-};
+import { fetchSourcesForTable } from '../services/scrapingService';
 
 const PredictedJobsPage: React.FC<{
     isFiltersOpen: boolean;
     setIsFiltersOpen: (isOpen: boolean) => void;
     mainContentRef: React.RefObject<HTMLDivElement>;
     onFilterCountChange: (count: number) => void;
+    isActive: boolean;
 }> = (props) => {
     const { accessibilitySettings } = useSettings();
     const { 
@@ -29,17 +20,17 @@ const PredictedJobsPage: React.FC<{
         setDefaultPredictedFilter,
         isUserDataLoaded
     } = useUserData();
-    const [allArticles, setAllArticles] = useState<ProcessedPredictedJob[]>([]);
+    const [availableSources, setAvailableSources] = useState<string[]>([]);
     
     useEffect(() => {
-        fetchAllArticlesForSources('predicted_openings').then(setAllArticles);
+        fetchSourcesForTable('predicted_openings').then(setAvailableSources);
     }, []);
 
     return (
         <ArticleListPage
             pageTitle="Concursos Previstos"
             table="predicted_openings"
-            allArticles={allArticles}
+            availableSources={availableSources}
             accessibilitySettings={accessibilitySettings}
             isFiltersOpen={props.isFiltersOpen}
             setIsFiltersOpen={props.setIsFiltersOpen}
@@ -54,6 +45,7 @@ const PredictedJobsPage: React.FC<{
             itemType="predicted"
             onFilterCountChange={props.onFilterCountChange}
             isUserDataLoaded={isUserDataLoaded}
+            isActive={props.isActive}
         />
     );
 };

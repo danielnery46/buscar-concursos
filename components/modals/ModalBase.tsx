@@ -27,13 +27,11 @@ export const useModalLifecycle = (isOpen: boolean, onClose: () => void, disableI
 
     useEffect(() => {
         if (isOpen) {
-            document.body.style.overflow = 'hidden';
             const timer = setTimeout(() => {
                 setShowContent(true);
             }, 10); // Pequeno atraso para permitir a renderização inicial
             return () => {
                 clearTimeout(timer);
-                document.body.style.overflow = 'unset';
             };
         } else {
             setShowContent(false);

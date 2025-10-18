@@ -1,15 +1,21 @@
-import { createClient } from '@supabase/supabase-js';
+// FIX: Add a triple-slash directive to include Vite's client types.
+// This provides TypeScript with type definitions for `import.meta.env`.
+/// <reference types="vite/client" />
 
-// As chaves do Supabase agora são carregadas a partir de variáveis de ambiente
-// usando o padrão do Vite (prefixo VITE_).
-// Crie um arquivo .env na raiz do projeto com as suas chaves.
-// FIX: Cast import.meta to any to access Vite environment variables without global type modification.
-export const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
-// FIX: Cast import.meta to any to access Vite environment variables without global type modification.
-export const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '../supabase/database.types';
+
+// As chaves do Supabase são carregadas a partir de variáveis de ambiente,
+// conforme as melhores práticas de segurança e a documentação do projeto.
+// Para desenvolvimento local, crie um arquivo .env na raiz e adicione:
+// VITE_SUPABASE_URL="SEU_URL_SUPABASE"
+// VITE_SUPABASE_ANON_KEY="SUA_CHAVE_ANON"
+
+export const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Supabase URL and Anon Key must be provided in the .env file with the VITE_ prefix.");
+  throw new Error("As variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY não foram definidas. Verifique seu arquivo .env ou as configurações de ambiente.");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);

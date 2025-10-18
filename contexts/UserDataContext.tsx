@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, FC, useRef } from 'react';
-import type { SearchCriteria, PredictedCriteria, User, AccessibilitySettings } from '../types';
+import type { SearchCriteria, PredictedCriteria, User, AccessibilitySettings, Json } from '../types';
 import { useAuth } from './AuthContext';
 import { supabase } from '../utils/supabase';
 import {
@@ -72,7 +72,7 @@ const usePersistentState = <T,>(value: T, user: User | null, isLoaded: boolean, 
             if (user) {
                 const columnName = keyToColumnMap[key];
                 if (!columnName) return;
-                const { error } = await supabase.from('user_data').upsert({ id: user.id, [columnName]: debouncedValue });
+                const { error } = await supabase.from('user_data').upsert({ id: user.id, [columnName]: debouncedValue as unknown as Json });
                 if (error) console.error(`Error saving ${key}:`, error);
             } else {
                 try {
@@ -163,13 +163,13 @@ export const UserDataProvider: FC<UserDataProviderProps> = ({ children }) => {
                         return cloudData || defaultValue;
                     };
                     
-                    setCidadeRota(mergeData(cloudData?.rota_cidade, ROTA_CIDADE_KEY, ''));
-                    setFavoriteSearches(mergeData(cloudData?.favorite_searches, FAVORITE_SEARCHES_KEY, []));
-                    setFavoritePredictedFilters(mergeData(cloudData?.favorite_predicted_filters, FAVORITE_PREDICTED_FILTERS_KEY, []));
-                    setFavoriteNewsFilters(mergeData(cloudData?.favorite_news_filters, FAVORITE_NEWS_FILTERS_KEY, []));
-                    setDefaultSearch(mergeData(cloudData?.default_search, DEFAULT_SEARCH_KEY, null));
-                    setDefaultPredictedFilter(mergeData(cloudData?.default_predicted_filter, DEFAULT_PREDICTED_FILTER_KEY, null));
-                    setDefaultNewsFilter(mergeData(cloudData?.default_news_filter, DEFAULT_NEWS_FILTER_KEY, null));
+                    setCidadeRota(mergeData(cloudData?.rota_cidade, ROTA_CIDADE_KEY, '') ?? '');
+                    setFavoriteSearches(mergeData(cloudData?.favorite_searches, FAVORITE_SEARCHES_KEY, []) as unknown as SearchCriteria[] ?? []);
+                    setFavoritePredictedFilters(mergeData(cloudData?.favorite_predicted_filters, FAVORITE_PREDICTED_FILTERS_KEY, []) as unknown as PredictedCriteria[] ?? []);
+                    setFavoriteNewsFilters(mergeData(cloudData?.favorite_news_filters, FAVORITE_NEWS_FILTERS_KEY, []) as unknown as PredictedCriteria[] ?? []);
+                    setDefaultSearch(mergeData(cloudData?.default_search, DEFAULT_SEARCH_KEY, null) as unknown as SearchCriteria | null ?? null);
+                    setDefaultPredictedFilter(mergeData(cloudData?.default_predicted_filter, DEFAULT_PREDICTED_FILTER_KEY, null) as unknown as PredictedCriteria | null ?? null);
+                    setDefaultNewsFilter(mergeData(cloudData?.default_news_filter, DEFAULT_NEWS_FILTER_KEY, null) as unknown as PredictedCriteria | null ?? null);
                     
                     window.dispatchEvent(new CustomEvent('migrationDecision', { detail: { action: 'migrate' } }));
                     userDataKeys.forEach(key => localStorage.removeItem(key));
@@ -178,13 +178,13 @@ export const UserDataProvider: FC<UserDataProviderProps> = ({ children }) => {
                 };
 
                 const handleDiscard = () => {
-                    setCidadeRota(cloudData?.rota_cidade || '');
-                    setFavoriteSearches(cloudData?.favorite_searches || []);
-                    setFavoritePredictedFilters(cloudData?.favorite_predicted_filters || []);
-                    setFavoriteNewsFilters(cloudData?.favorite_news_filters || []);
-                    setDefaultSearch(cloudData?.default_search || null);
-                    setDefaultPredictedFilter(cloudData?.default_predicted_filter || null);
-                    setDefaultNewsFilter(cloudData?.default_news_filter || null);
+                    setCidadeRota(cloudData?.rota_cidade ?? '');
+                    setFavoriteSearches(cloudData?.favorite_searches as unknown as SearchCriteria[] ?? []);
+                    setFavoritePredictedFilters(cloudData?.favorite_predicted_filters as unknown as PredictedCriteria[] ?? []);
+                    setFavoriteNewsFilters(cloudData?.favorite_news_filters as unknown as PredictedCriteria[] ?? []);
+                    setDefaultSearch(cloudData?.default_search as unknown as SearchCriteria | null ?? null);
+                    setDefaultPredictedFilter(cloudData?.default_predicted_filter as unknown as PredictedCriteria | null ?? null);
+                    setDefaultNewsFilter(cloudData?.default_news_filter as unknown as PredictedCriteria | null ?? null);
                     
                     window.dispatchEvent(new CustomEvent('migrationDecision', { detail: { action: 'discard' } }));
                     userDataKeys.forEach(key => localStorage.removeItem(key));
@@ -197,13 +197,13 @@ export const UserDataProvider: FC<UserDataProviderProps> = ({ children }) => {
                 const { data, error } = await supabase.from('user_data').select('*').eq('id', user.id).single();
                 if (error && error.code !== 'PGRST116') console.error('Error fetching user data:', error);
                 
-                setCidadeRota(data?.rota_cidade || '');
-                setFavoriteSearches(data?.favorite_searches || []);
-                setFavoritePredictedFilters(data?.favorite_predicted_filters || []);
-                setFavoriteNewsFilters(data?.favorite_news_filters || []);
-                setDefaultSearch(data?.default_search || null);
-                setDefaultPredictedFilter(data?.default_predicted_filter || null);
-                setDefaultNewsFilter(data?.default_news_filter || null);
+                setCidadeRota(data?.rota_cidade ?? '');
+                setFavoriteSearches(data?.favorite_searches as unknown as SearchCriteria[] ?? []);
+                setFavoritePredictedFilters(data?.favorite_predicted_filters as unknown as PredictedCriteria[] ?? []);
+                setFavoriteNewsFilters(data?.favorite_news_filters as unknown as PredictedCriteria[] ?? []);
+                setDefaultSearch(data?.default_search as unknown as SearchCriteria | null ?? null);
+                setDefaultPredictedFilter(data?.default_predicted_filter as unknown as PredictedCriteria | null ?? null);
+                setDefaultNewsFilter(data?.default_news_filter as unknown as PredictedCriteria | null ?? null);
                 setIsUserDataLoaded(true);
             } else {
                 setCidadeRota(getLocalItem(ROTA_CIDADE_KEY, ''));

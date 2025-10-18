@@ -3,6 +3,15 @@ import type { Session, User } from '@supabase/supabase-js';
 
 export type { Session, User };
 
+// FIX: Export the 'Json' type to be used in other files for Supabase data operations.
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
+
 export type Theme = 'light' | 'dark' | 'auto';
 
 export interface IconProps {

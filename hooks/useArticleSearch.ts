@@ -20,23 +20,26 @@ export const useArticleSearch = (
     defaultFilter: PredictedCriteria | null,
     isUserDataLoaded: boolean,
     page: number,
-    itemsPerPage: number
+    itemsPerPage: number,
+    isActive: boolean
 ) => {
     const [criteria, setCriteria] = useState<PredictedCriteria>({ ...defaultPredictedValues, ...(defaultFilter || {}) });
     const debouncedCriteria = useDebounce(criteria, 500);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(isActive);
     const [error, setError] = useState<string | null>(null);
     const [filteredItems, setFilteredItems] = useState<ProcessedPredictedJob[]>([]);
     const [totalItems, setTotalItems] = useState(0);
+    const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
         if (isUserDataLoaded) {
             setCriteria({ ...defaultPredictedValues, ...(defaultFilter || {}) });
+            setIsInitialized(true);
         }
     }, [defaultFilter, isUserDataLoaded]);
 
     useEffect(() => {
-        if (!isUserDataLoaded) return;
+        if (!isActive || !isUserDataLoaded || !isInitialized) return;
         
         const controller = new AbortController();
         const fetchData = async () => {
@@ -48,19 +51,20 @@ export const useArticleSearch = (
                 setTotalItems(count);
             } catch (err: any) {
                 if (err.name !== 'AbortError') {
-                    const message = table === 'news_articles' ? 'Não foi possível carregar as notícias.' : 'Não foi possível carregar os concursos previstos.';
-                    setError(`${message} Tente novamente mais tarde.`);
+                    setError(err.message || "Ocorreu um erro desconhecido ao buscar os artigos.");
                     console.error(`Error fetching articles from ${table}:`, err);
                 }
             } finally {
-                setIsLoading(false);
+                if (!controller.signal.aborted) {
+                    setIsLoading(false);
+                }
             }
         };
 
         fetchData();
         return () => { controller.abort(); };
 
-    }, [debouncedCriteria, page, itemsPerPage, table, isUserDataLoaded]);
+    }, [debouncedCriteria, page, table, isActive]);
 
     return {
         criteria,
