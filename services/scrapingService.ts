@@ -135,9 +135,12 @@ export async function fetchJobs(criteria: SearchCriteria, page: number, pageSize
 
     const { data, error, count } = await query;
     if (error) {
-        // Do not log AbortError, as it's an expected cancellation.
-        if (error.name === 'AbortError') {
-            throw error;
+        const isAbortError = error.name === 'AbortError' || (error.message && error.message.includes('The operation was aborted'));
+        if (isAbortError) {
+            // Re-throw as a standard AbortError so calling hooks can catch it reliably.
+            const abortErr = new Error("The operation was aborted.");
+            abortErr.name = "AbortError";
+            throw abortErr;
         }
         console.error(`Error fetching jobs (type: ${type}):`, error);
         throw new Error(`Failed to fetch jobs`);
@@ -152,9 +155,12 @@ export async function fetchJobsSummary(criteria: SearchCriteria, signal?: AbortS
     const { data, error, count } = await query;
 
     if (error) {
-        // Do not log AbortError, as it's an expected cancellation.
-        if (error.name === 'AbortError') {
-            throw error;
+        const isAbortError = error.name === 'AbortError' || (error.message && error.message.includes('The operation was aborted'));
+        if (isAbortError) {
+            // Re-throw as a standard AbortError so calling hooks can catch it reliably.
+            const abortErr = new Error("The operation was aborted.");
+            abortErr.name = "AbortError";
+            throw abortErr;
         }
         console.error('Error fetching jobs summary:', error);
         throw new Error('Failed to fetch jobs summary');
@@ -226,9 +232,12 @@ export async function fetchArticles(table: 'predicted_openings' | 'news_articles
 
     const { data, error, count } = await query;
     if (error) {
-        // Do not log AbortError, as it's an expected cancellation.
-        if (error.name === 'AbortError') {
-            throw error;
+        const isAbortError = error.name === 'AbortError' || (error.message && error.message.includes('The operation was aborted'));
+        if (isAbortError) {
+            // Re-throw as a standard AbortError so calling hooks can catch it reliably.
+            const abortErr = new Error("The operation was aborted.");
+            abortErr.name = "AbortError";
+            throw abortErr;
         }
         console.error(`Error fetching articles from ${table}:`, error);
         throw new Error(`Failed to fetch articles from ${table}`);
