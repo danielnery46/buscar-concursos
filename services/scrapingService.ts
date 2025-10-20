@@ -21,7 +21,7 @@ import { normalizeText } from '../utils/text';
 import { ESTADOS_POR_REGIAO, VIZINHANCAS_ESTADOS } from '../constants';
 import { retryAsync } from '../utils/helpers';
 
-const JOB_OPENINGS_LIST_COLUMNS = 'title, organization, location, link, effective_city, logo_path, deadline_formatted, deadline_date, type, normalized_effective_city, max_salary_numeric, min_salary_numeric, vacancies_numeric, education_levels, parsed_salary_text, parsed_vacancies_text, mentioned_states';
+const JOB_OPENINGS_LIST_COLUMNS = 'title, organization, location, link, effective_city, logo_path, deadline_formatted, deadline_date, type, normalized_effective_city, max_salary_numeric, min_salary_numeric, vacancies_numeric, education_levels, parsed_salary_text, parsed_vacancies_text, mentioned_states, parsed_roles';
 const PREDICTED_ARTICLES_COLUMNS = 'id, publication_date, title, link, source, mentioned_states';
 
 const jobMapper = (item: any): ProcessedJob => ({
@@ -43,7 +43,7 @@ const jobMapper = (item: any): ProcessedJob => ({
     educationLevels: item.education_levels || [],
     parsedSalary: item.parsed_salary_text,
     parsedVacancies: item.parsed_vacancies_text,
-    parsedRoles: [], // Not used in UI, providing fallback
+    parsedRoles: item.parsed_roles || [],
     mentionedStates: item.mentioned_states || [],
 });
 
@@ -66,7 +66,20 @@ function buildBaseJobQuery(selectString: string, criteria: SearchCriteria, signa
     }
 
     if (criteria.palavraChave) {
-        query = query.ilike('searchable_text', `%${normalizeText(criteria.palavraChave)}%`);
+        query = query.textSearch('searchable_text', `'${normalizeText(criteria.palavraChave)}'`, {
+            type: 'plain',
+            config: 'portuguese',
+        });
+    }
+
+    if (criteria.cargo) {
+        // Using 'textSearch' on 'education_level_text' provides a more precise search for job roles,
+        // as this column is the source for the 'parsed_roles' displayed on cards.
+        // The 'plain' type ensures whole-word matching, and the 'portuguese' config handles stemming.
+        query = query.textSearch('education_level_text', `'${normalizeText(criteria.cargo)}'`, {
+            type: 'plain',
+            config: 'portuguese',
+        });
     }
 
     if (criteria.escolaridade && criteria.escolaridade.length > 0) {

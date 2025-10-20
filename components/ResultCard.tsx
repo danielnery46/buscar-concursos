@@ -8,7 +8,8 @@ import {
     ExternalLinkIcon,
     MaximizeIcon,
     RouteIcon,
-    ShareIcon
+    ShareIcon,
+    BriefcaseIcon,
 } from './Icons';
 import { detailIconMap } from './Icons';
 import { useModal } from '../contexts/ModalContext';
@@ -186,6 +187,12 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
                     shouldShowLocationPill && job.mentionedStates?.map((state: string) => <InfoPill key={state} icon={detailIconMap.neighbors} text={state} pillType="location" />)
                 )}
                 {distanceText && <InfoPill icon={<CompassIcon className="h-4 w-4" />} text={distanceText} pillType="distance" />}
+                {job.parsedRoles.slice(0, 2).map(role => (
+                    <InfoPill key={role} icon={<BriefcaseIcon />} text={role} pillType="roles" />
+                ))}
+                {job.parsedRoles.length > 2 && (
+                    <InfoPill icon={<BriefcaseIcon />} text={`+${job.parsedRoles.length - 2} cargos`} pillType="roles" />
+                )}
                 <InfoPill icon={detailIconMap.salary} text={job.parsedSalary} pillType="salary" />
                 <InfoPill icon={detailIconMap.vacancies} text={job.parsedVacancies} pillType="vacancies" />
                 <InfoPill icon={detailIconMap.education} text={educationText} pillType="education" />

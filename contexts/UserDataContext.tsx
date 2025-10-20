@@ -54,20 +54,33 @@ const keyToColumnMap: { [key: string]: string } = {
 
 const usePersistentState = <T,>(value: T, user: User | null, isLoaded: boolean, key: string) => {
     const debouncedValue = useDebounce(value, 1500);
-    const isInitialRunAfterLoad = useRef(true);
+    // This ref tracks if the initial data for the current user has been loaded.
+    // It prevents saving the default/stale state during the loading process.
+    const initialLoadDone = useRef(false);
+    const lastUserId = useRef(user?.id);
 
+    // Effect to manage the initial load state.
     useEffect(() => {
-        if (!isLoaded) {
-            isInitialRunAfterLoad.current = true;
+        // If user changes (login/logout), reset the load flag.
+        if (user?.id !== lastUserId.current) {
+            initialLoadDone.current = false;
+            lastUserId.current = user?.id;
         }
-    }, [isLoaded]);
 
+        // Once `isLoaded` becomes true for the current user/session, mark initial load as done.
+        // This ensures we don't save anything until the first load is complete.
+        if (isLoaded && !initialLoadDone.current) {
+            initialLoadDone.current = true;
+        }
+    }, [user, isLoaded]);
+
+    // Effect to save the debounced value.
     useEffect(() => {
-        if (!isLoaded || isInitialRunAfterLoad.current) {
-            if (isLoaded) isInitialRunAfterLoad.current = false;
+        // Do not save if the initial data load for the current user/session is not complete.
+        if (!initialLoadDone.current) {
             return;
         }
-        
+
         const saveState = async () => {
             if (user) {
                 const columnName = keyToColumnMap[key];
@@ -84,8 +97,9 @@ const usePersistentState = <T,>(value: T, user: User | null, isLoaded: boolean, 
         };
 
         saveState();
-    }, [debouncedValue, user, key, isLoaded]);
+    }, [debouncedValue, user, key]); // Note: `isLoaded` is NOT a dependency here.
 };
+
 
 interface UserDataProviderProps {
   children: ReactNode;

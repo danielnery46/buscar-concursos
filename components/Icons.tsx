@@ -525,4 +525,5 @@ export const detailIconMap: { [key in FormattedSearchDetail['type']]: React.Reac
     neighbors: <MapIcon className="h-4 w-4" />,
     date: <CalendarIcon className="h-4 w-4" />,
     source: <DocumentTextIcon className="h-4 w-4" />,
+    role: <BriefcaseIcon className="h-4 w-4" />,
 };

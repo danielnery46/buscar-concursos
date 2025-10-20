@@ -123,6 +123,9 @@ export function formatSearchCriteria(criteria: Partial<SearchCriteria>): { title
     if (fullCriteria.cidadeFiltro && isStateSelected) {
         details.push({ type: 'keyword', text: fullCriteria.cidadeFiltro, key: 'cidadeFiltro' });
     }
+    if (fullCriteria.cargo) {
+        details.push({ type: 'role', text: `Cargo: "${fullCriteria.cargo.trim()}"`, key: 'cargo' });
+    }
     if (fullCriteria.palavraChave) {
         details.push({ type: 'keyword', text: `Termo: "${fullCriteria.palavraChave.trim()}"`, key: 'palavraChave' });
     }

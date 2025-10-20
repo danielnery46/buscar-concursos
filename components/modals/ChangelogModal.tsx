@@ -24,8 +24,15 @@ export function ChangelogModal({ isOpen, onClose }: ModalProps) {
                     <main className="p-4 sm:p-6 overflow-y-auto flex-1">
                         <div className="prose prose-base dark:prose-invert max-w-none text-justify hyphens-auto">
                             <div className="not-prose p-4 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-500/30 rounded-lg mb-4">
-                                <h3 className="text-lg font-bold text-indigo-800 dark:text-indigo-200">Novidades da versão 2.0</h3>
+                                <h3 className="text-lg font-bold text-indigo-800 dark:text-indigo-200">Novidades da versão 2.1</h3>
                                 <ul className="mt-2 space-y-2 list-disc list-outside pl-5 text-indigo-700 dark:text-indigo-300">
+                                    <li><span className="font-semibold">Filtragem por Cargo:</span> Agora é possível buscar vagas por cargos específicos no painel de filtros da aba "Abertos".</li>
+                                    <li><span className="font-semibold">Correções Gerais de Bugs:</span> Implementamos várias correções para melhorar a estabilidade e a experiência de uso do aplicativo.</li>
+                                </ul>
+                            </div>
+                            <div className="not-prose p-4 bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-500/30 rounded-lg mb-4">
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">Novidades da versão 2.0</h3>
+                                <ul className="mt-2 space-y-2 list-disc list-outside pl-5 text-gray-700 dark:text-gray-300">
                                     <li><span className="font-semibold">Migração de Dados Locais:</span> Ao fazer login, o sistema agora detecta dados salvos localmente e oferece a opção de migrá-los para sua conta na nuvem.</li>
                                     <li><span className="font-semibold">Otimização do Banco de Dados:</span> Realizamos uma otimização nas consultas ao banco de dados, resultando em buscas mais rápidas e eficientes.</li>
                                     <li><span className="font-semibold">Extração de Dados Aprimorada:</span> Os robôs de extração de dados foram aprimorados para garantir maior precisão e confiabilidade das informações.</li>
@@ -55,7 +62,7 @@ export function ChangelogModal({ isOpen, onClose }: ModalProps) {
                                     <li><span className="font-semibold">Aba de Notícias:</span> Adicionamos uma nova aba dedicada às últimas notícias e atualizações do mundo dos concursos.</li>
                                     <li><span className="font-semibold">Filtro de Distância em KM:</span> O filtro de distância foi aprimorado e agora permite a busca por um raio em quilômetros.</li>
                                     <li><span className="font-semibold">Remoção do Visual Compacto:</span> O modo de visualização compacto, presente na v1.7, foi removido para simplificar a interface.</li>
-                                    <li><span className="font-semibold">Melhorias e Correções:</span> Realizamos diversas melhorias gerais na interface e correções de bugs em todo o sistema, incluindo otimizações no mecanismo de filtros.</li>
+                                    <li><span className="font-semibold">Melhorias e Correções:</span> Realizadas diversas melhorias gerais na interface e correções de bugs em todo o sistema, incluindo otimizações no mecanismo de filtros.</li>
                                 </ul>
                             </div>
                             <div className="not-prose p-4 bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-500/30 rounded-lg mb-4">

@@ -80,6 +80,7 @@ export interface SearchCriteria extends SavedItem {
   salarioMinimo: number | '';
   vagasMinimas: number | '';
   palavraChave: string;
+  cargo: string;
   incluirVizinhos: boolean;
   distanciaRaio: number | '';
   sort: OpenJobsSortOption;
@@ -121,7 +122,7 @@ export interface SummaryData {
 }
 
 export interface FormattedSearchDetail {
-    type: 'salary' | 'education' | 'vacancies' | 'distance' | 'keyword' | 'neighbors' | 'date' | 'source';
+    type: 'salary' | 'education' | 'vacancies' | 'distance' | 'keyword' | 'neighbors' | 'date' | 'source' | 'role';
     text: string;
     key: string;
     value?: any;

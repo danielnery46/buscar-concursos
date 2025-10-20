@@ -96,6 +96,7 @@ export const systemDefaultValues: Omit<SearchCriteria, 'name'> = {
     salarioMinimo: '' as const,
     vagasMinimas: '' as const,
     palavraChave: '',
+    cargo: '',
     incluirVizinhos: false,
     distanciaRaio: '' as const,
     sort: 'alpha-asc',

@@ -12,10 +12,12 @@ import {
     SlidersIcon,
     TypeIcon,
     SortIcon,
+    SearchIcon,
 } from './Icons';
 import { Accordion } from './ui/Accordion';
 import { CustomCheckbox } from './ui/Checkbox';
 import { Slider } from './ui/Slider';
+import { Input } from './ui/Input';
 
 // =================================================================================================
 // CONTEÚDO DE FORMULÁRIO REUTILIZÁVEL PARA 'Abertos'
@@ -29,11 +31,15 @@ interface SearchFormContentProps {
 }
 
 export const SearchFormContent: React.FC<SearchFormContentProps> = memo(({ criteria, onCriteriaChange, isCityDataLoading, cities, isModalView = false }) => {
-    const [openAccordions, setOpenAccordions] = useState<string[]>([]);
+    // MODIFICAÇÃO: Apenas um acordeão pode estar aberto por vez e todos devem começar fechados
+    // para manter a interface limpa em telas menores. Esta é uma decisão de design intencional.
+    const [openAccordion, setOpenAccordion] = useState<string | null>(null);
     
     // --- Entradas com Debounce ---
     const [localKeyword, setLocalKeyword] = useState(criteria.palavraChave);
     const debouncedKeyword = useDebounce(localKeyword, 500);
+    const [localCargo, setLocalCargo] = useState(criteria.cargo);
+    const debouncedCargo = useDebounce(localCargo, 500);
 
     // Sincroniza o estado local se a prop de critérios pai mudar (ex: carregar um favorito ou limpar filtros)
     useEffect(() => {
@@ -41,6 +47,13 @@ export const SearchFormContent: React.FC<SearchFormContentProps> = memo(({ crite
             setLocalKeyword(criteria.palavraChave);
         }
     }, [criteria.palavraChave]);
+    
+    useEffect(() => {
+        if (criteria.cargo !== localCargo) {
+            setLocalCargo(criteria.cargo);
+        }
+    }, [criteria.cargo]);
+
 
     // Propaga as mudanças com debounce para o componente pai
     useEffect(() => {
@@ -51,9 +64,17 @@ export const SearchFormContent: React.FC<SearchFormContentProps> = memo(({ crite
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [debouncedKeyword, onCriteriaChange]);
 
+    useEffect(() => {
+        if (debouncedCargo !== criteria.cargo) {
+            onCriteriaChange(prev => ({ ...prev, cargo: debouncedCargo }));
+        }
+    // A dependência `criteria.cargo` é intencionalmente omitida para evitar um loop de re-renderização.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedCargo, onCriteriaChange]);
+
 
     const toggleAccordion = (section: string) => {
-        setOpenAccordions(prev => prev.includes(section) ? prev.filter(s => s !== section) : [...prev, section]);
+        setOpenAccordion(prev => prev === section ? null : section);
     };
 
     const handleEstadoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -144,14 +165,15 @@ export const SearchFormContent: React.FC<SearchFormContentProps> = memo(({ crite
 
     const roleSummary = useMemo(() => {
         const parts = [];
-        if(criteria.palavraChave) parts.push(`"${criteria.palavraChave}"`);
+        if(criteria.cargo) parts.push(`Cargo: "${criteria.cargo}"`);
+        if(criteria.palavraChave) parts.push(`Termo: "${criteria.palavraChave}"`);
         if(criteria.escolaridade.length > 0) parts.push(`${criteria.escolaridade.length} nível(is)`);
         return parts.join(' / ');
-    }, [criteria.palavraChave, criteria.escolaridade]);
+    }, [criteria.cargo, criteria.palavraChave, criteria.escolaridade]);
 
     return (
         <div className={!isModalView ? "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700/80 rounded-xl shadow-sm" : ""}>
-            <Accordion title="Localização" icon={<LocationIcon className="h-5 w-5" />} isOpen={openAccordions.includes('location')} onToggle={() => toggleAccordion('location')} summary={locationSummary}>
+            <Accordion title="Localização" icon={<LocationIcon className="h-5 w-5" />} isOpen={openAccordion === 'location'} onToggle={() => toggleAccordion('location')} summary={locationSummary}>
                 <div>
                     <label htmlFor="abrangencia" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Abrangência</label>
                     <div className="relative">
@@ -181,16 +203,37 @@ export const SearchFormContent: React.FC<SearchFormContentProps> = memo(({ crite
                 )}
             </Accordion>
             
-            <Accordion title="Salário e Vagas" icon={<SlidersIcon className="h-5 w-5" />} isOpen={openAccordions.includes('salary')} onToggle={() => toggleAccordion('salary')} summary={salarySummary}>
+            <Accordion title="Salário e Vagas" icon={<SlidersIcon className="h-5 w-5" />} isOpen={openAccordion === 'salary'} onToggle={() => toggleAccordion('salary')} summary={salarySummary}>
                  <Slider label="Salário Mínimo" id="salarioMinimo" value={criteria.salarioMinimo} onChange={(v) => onCriteriaChange(prev => ({...prev, salarioMinimo: v }))} min={0} max={15000} step={500} unit="valor" valuePrefix="A partir de R$ " numberInput={true}/>
                  <Slider label="Vagas Mínimas" id="vagasMinimas" value={criteria.vagasMinimas} onChange={(v) => onCriteriaChange(prev => ({...prev, vagasMinimas: v }))} min={0} max={100} step={1} unit="quantidade" valueSuffix={Number(criteria.vagasMinimas) > 1 ? ' vagas' : ' vaga'} numberInput={true}/>
             </Accordion>
 
-            <Accordion title="Palavra-chave e Escolaridade" icon={<BriefcaseIcon className="h-5 w-5" />} isOpen={openAccordions.includes('role')} onToggle={() => toggleAccordion('role')} summary={roleSummary}>
-                <div className="relative"><label htmlFor="palavraChave" className="sr-only">Palavra-chave no título</label><input type="text" id="palavraChave" value={localKeyword} onChange={(e) => setLocalKeyword(e.target.value)} placeholder="Palavra-chave no título" className="w-full text-base px-4 py-2 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-gray-400 dark:placeholder:text-gray-500" /></div>
+            <Accordion title="Cargo, Palavra-chave e Escolaridade" icon={<BriefcaseIcon className="h-5 w-5" />} isOpen={openAccordion === 'role'} onToggle={() => toggleAccordion('role')} summary={roleSummary}>
+                <div>
+                    <label htmlFor="cargo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Cargo / Posição</label>
+                    <Input
+                        type="text"
+                        id="cargo"
+                        value={localCargo}
+                        onChange={(e) => setLocalCargo(e.target.value)}
+                        placeholder="Ex: Professor, Analista, Técnico"
+                        icon={<BriefcaseIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" />}
+                    />
+                </div>
+                 <div>
+                    <label htmlFor="palavraChave" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Termo na descrição</label>
+                    <Input
+                        type="text"
+                        id="palavraChave"
+                        value={localKeyword}
+                        onChange={(e) => setLocalKeyword(e.target.value)}
+                        placeholder="Ex: Edital, IBGE, Diário Oficial"
+                        icon={<SearchIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" />}
+                    />
+                </div>
                 <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Nível de escolaridade</label><div className="grid gap-2 grid-cols-2">{NIVEIS_ESCOLARIDADE.filter((n: string) => n !== 'Qualquer').map((nivel: string) => (<CustomCheckbox key={nivel} id={`esc-${nivel.replace(/\s/g, '-')}`} value={nivel} checked={criteria.escolaridade.includes(nivel)} onChange={handleEscolaridadeChange}>{nivel.replace('Nível ', '')}</CustomCheckbox>))}</div></div>
             </Accordion>
-            <Accordion title="Ordenação" icon={<SortIcon className="h-5 w-5" />} isOpen={openAccordions.includes('sort')} onToggle={() => toggleAccordion('sort')} summary={sortOptions.find(o => o.value === criteria.sort)?.label}>
+            <Accordion title="Ordenação" icon={<SortIcon className="h-5 w-5" />} isOpen={openAccordion === 'sort'} onToggle={() => toggleAccordion('sort')} summary={sortOptions.find(o => o.value === criteria.sort)?.label}>
                 <div>
                     <label htmlFor="sort" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Ordenar resultados por</label>
                     <div className="relative">
@@ -228,7 +271,9 @@ const articleSortOptions: { value: ArticleSortOption; label: string }[] = [
 ];
 
 export const PredictedNewsFormContent: React.FC<PredictedNewsFormContentProps> = memo(({ criteria, onCriteriaChange, availableSources, isModalView = false }) => {
-    const [openAccordions, setOpenAccordions] = useState<string[]>([]);
+    // MODIFICAÇÃO: Apenas um acordeão pode estar aberto por vez e todos devem começar fechados
+    // para manter a interface limpa em telas menores. Esta é uma decisão de design intencional.
+    const [openAccordion, setOpenAccordion] = useState<string | null>(null);
     const [localSearchTerm, setLocalSearchTerm] = useState(criteria.searchTerm);
     const debouncedSearchTerm = useDebounce(localSearchTerm, 1000);
 
@@ -247,7 +292,7 @@ export const PredictedNewsFormContent: React.FC<PredictedNewsFormContentProps> =
     }, [debouncedSearchTerm, onCriteriaChange]);
     
     const toggleAccordion = (section: string) => {
-        setOpenAccordions(prev => prev.includes(section) ? prev.filter(s => s !== section) : [...prev, section]);
+        setOpenAccordion(prev => prev === section ? null : section);
     };
 
     const searchSummary = useMemo(() => {
@@ -277,7 +322,7 @@ export const PredictedNewsFormContent: React.FC<PredictedNewsFormContentProps> =
 
     return (
         <div className={!isModalView ? "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700/80 rounded-xl shadow-sm" : ""}>
-            <Accordion title="Busca e Localização" icon={<TypeIcon className="h-5 w-5" />} isOpen={openAccordions.includes('location')} onToggle={() => toggleAccordion('location')} summary={searchSummary}>
+            <Accordion title="Busca e Localização" icon={<TypeIcon className="h-5 w-5" />} isOpen={openAccordion === 'location'} onToggle={() => toggleAccordion('location')} summary={searchSummary}>
                 <div>
                     <label htmlFor="searchTerm-predicted" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Palavra-chave</label>
                     <div className="relative">
@@ -297,7 +342,7 @@ export const PredictedNewsFormContent: React.FC<PredictedNewsFormContentProps> =
                     </div>
                 </div>
             </Accordion>
-            <Accordion title="Data" icon={<CalendarIcon className="h-5 w-5" />} isOpen={openAccordions.includes('date')} onToggle={() => toggleAccordion('date')} summary={dateSummary}>
+            <Accordion title="Data" icon={<CalendarIcon className="h-5 w-5" />} isOpen={openAccordion === 'date'} onToggle={() => toggleAccordion('date')} summary={dateSummary}>
                 <div className="grid grid-cols-2 gap-3">
                     <div>
                         <label htmlFor="year-predicted" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Ano</label>
@@ -319,7 +364,7 @@ export const PredictedNewsFormContent: React.FC<PredictedNewsFormContentProps> =
                     </div>
                 </div>
             </Accordion>
-             <Accordion title="Ordenação" icon={<SortIcon className="h-5 w-5" />} isOpen={openAccordions.includes('sort')} onToggle={() => toggleAccordion('sort')} summary={articleSortOptions.find(o => o.value === criteria.sort)?.label}>
+             <Accordion title="Ordenação" icon={<SortIcon className="h-5 w-5" />} isOpen={openAccordion === 'sort'} onToggle={() => toggleAccordion('sort')} summary={articleSortOptions.find(o => o.value === criteria.sort)?.label}>
                 <div>
                     <label htmlFor="sort-predicted" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Ordenar resultados por</label>
                     <div className="relative">
@@ -337,7 +382,7 @@ export const PredictedNewsFormContent: React.FC<PredictedNewsFormContentProps> =
                 </div>
             </Accordion>
             {!isModalView && availableSources && availableSources.length > 0 && (
-                <Accordion title="Fontes" icon={<DocumentTextIcon className="h-5 w-5" />} isOpen={openAccordions.includes('sources')} onToggle={() => toggleAccordion('sources')} summary={sourcesSummary}>
+                <Accordion title="Fontes" icon={<DocumentTextIcon className="h-5 w-5" />} isOpen={openAccordion === 'sources'} onToggle={() => toggleAccordion('sources')} summary={sourcesSummary}>
                     <div className="space-y-3">
                         <p className="text-sm text-gray-600 dark:text-gray-400">Exibir notícias apenas das fontes selecionadas:</p>
                         <div className="flex gap-2">

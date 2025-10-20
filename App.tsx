@@ -24,7 +24,6 @@ import { useModal } from './contexts/ModalContext';
 import { useAppData } from './hooks/useAppData';
 import { InitialLoadErrorDisplay } from './components/StateDisplays';
 import { Header } from './components/Header';
-import { InstabilityBanner } from './components/InstabilityBanner';
 import { ConnectionErrorBanner } from './components/ConnectionErrorBanner';
 
 // Persist page state by importing them statically instead of lazy loading.
@@ -197,7 +196,6 @@ const App: React.FC = () => {
                     </main>
                 )}
             </div>
-            <InstabilityBanner />
             <ConnectionErrorBanner isVisible={showConnectionError} onDismiss={() => setShowConnectionError(false)} />
         </div>
     );

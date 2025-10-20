@@ -14,6 +14,7 @@ export const calculateActiveFilters = (criteria: SearchCriteria): number => {
     if (criteria.estado !== 'brasil') count++;
     if (criteria.cidadeFiltro && isStateSelected) count++;
     if (criteria.palavraChave) count++;
+    if (criteria.cargo) count++;
     if (criteria.escolaridade.length > 0) count++;
     if (criteria.salarioMinimo) count++;
     if (criteria.vagasMinimas) count++;
