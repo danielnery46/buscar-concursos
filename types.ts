@@ -138,8 +138,12 @@ export interface EstadosPorRegiao {
   [key: string]: Estado[];
 }
 
+export interface VIZINHANCAS_ESTADOS {
+    [key: string]: string[];
+}
+
 export type AuthView = 'login' | 'signup' | 'forgot_password';
-export type ActiveTab = 'search' | 'predicted' | 'news' | 'settings' | 'support' | 'auth';
+export type ActiveTab = 'search' | 'predicted' | 'news' | 'settings' | 'support' | 'auth' | 'rss';
 export type OverviewDashboardTab = 'summary' | 'open' | 'predicted' | 'news';
 export type SettingsSectionId = 'appearance' | 'accessibility' | 'data' | 'account';
 

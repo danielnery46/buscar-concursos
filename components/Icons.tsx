@@ -327,6 +327,13 @@ export const RedoIcon = memo<IconProps>(({ className }) => (
       <path d="M21 3v5h-5"></path>
     </svg>
 ));
+export const RssIcon = memo<IconProps>(({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M4 11a9 9 0 0 1 9 9" />
+      <path d="M4 4a16 16 0 0 1 16 16" />
+      <circle cx="5" cy="19" r="1" fill="currentColor" />
+    </svg>
+));
 export const RouteIcon = memo<IconProps>(({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
         <circle cx="6" cy="19" r="2"></circle>

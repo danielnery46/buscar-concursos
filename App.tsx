@@ -34,6 +34,7 @@ import NewsPage from './components/NewsPage';
 // Other pages can be lazy-loaded as their state is less critical to preserve.
 const SettingsPage = lazy(() => import('./components/SettingsPage'));
 const SupportPage = lazy(() => import('./components/SupportPage'));
+const RssPage = lazy(() => import('./components/RssPage'));
 const AuthPage = lazy(() => import('./components/AuthPage'));
 
 
@@ -76,7 +77,7 @@ const App: React.FC = () => {
         if (activeTab === 'predicted') setIsPredictedFiltersOpen(isOpen);
         if (activeTab === 'news') setIsNewsFiltersOpen(isOpen);
     }, [activeTab, setIsSearchFiltersOpen, setIsPredictedFiltersOpen, setIsNewsFiltersOpen]);
-    
+
     // Effect to detect Ctrl key press for link opening behavior
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Control') document.body.classList.add('ctrl-pressed'); };
@@ -189,6 +190,7 @@ const App: React.FC = () => {
                                 <Suspense fallback={<div className="flex-grow flex items-center justify-center"><div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-500"></div></div>}>
                                     {activeTab === 'settings' && <SettingsPage setActiveTab={setActiveTab} />}
                                     {activeTab === 'support' && <SupportPage />}
+                                    {activeTab === 'rss' && <RssPage cityDataCache={cityDataCache} loadCitiesForState={loadCitiesForState} />}
                                     {activeTab === 'auth' && <AuthPage view={authView} onViewChange={setAuthView} initialEmail={user?.email} />}
                                 </Suspense>
                             </>
