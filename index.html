@@ -97,13 +97,7 @@
       }]
     }
     </script>
-
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-      }
-    </script>
+    
     <script>
       (function() {
         let theme = localStorage.getItem('theme');
@@ -121,20 +115,20 @@
         }
       })();
     </script>
-<script type="importmap">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="importmap">
 {
   "imports": {
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.0.1",
-    "react/": "https://aistudiocdn.com/react@^19.1.1/",
-    "react": "https://aistudiocdn.com/react@^19.1.1",
-    "vite": "https://aistudiocdn.com/vite@^7.1.3",
-    "fs": "https://aistudiocdn.com/fs@^0.0.1-security",
-    "path": "https://aistudiocdn.com/path@^0.12.7",
-    "url": "https://aistudiocdn.com/url@^0.11.4",
-    "jsdom": "https://aistudiocdn.com/jsdom@^27.0.0",
-    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.57.4",
-    "deno.ns": "https://aistudiocdn.com/deno.ns@^0.8.0"
+    "react": "https://esm.sh/react@18.3.1",
+    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+    "react-dom": "https://esm.sh/react-dom@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.44.2",
+    "tslib": "https://esm.sh/tslib@2.6.3",
+    "vite": "https://aistudiocdn.com/vite@^7.1.12",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.0.4",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
   }
 }
 </script>
