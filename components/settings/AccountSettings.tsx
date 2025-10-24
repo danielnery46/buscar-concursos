@@ -12,7 +12,7 @@ import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 
 interface AccountSettingsProps {
-    onSignOut: () => void;
+    onSignOut: () => Promise<void>;
 }
 
 const FormStatus: React.FC<{ type: 'success' | 'error'; message: string }> = memo(({ type, message }) => {
@@ -30,7 +30,7 @@ const FormStatus: React.FC<{ type: 'success' | 'error'; message: string }> = mem
 });
 
 export const AccountSettings: React.FC<AccountSettingsProps> = ({ onSignOut }) => {
-    const { user, signOut } = useAuth();
+    const { user } = useAuth();
     const { cidadeRota, setCidadeRota, exportUserData, importUserData } = useUserData();
     const { setAccessibilitySettings } = useSettings();
 
@@ -165,13 +165,11 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({ onSignOut }) =
             if (error) {
                 throw new Error(error.message);
             }
-            await signOut();
+            await onSignOut();
         } catch (error) {
             setDeleteStatus({ type: 'error', message: `Erro ao apagar conta: ${error instanceof Error ? error.message : 'Tente novamente mais tarde.'}` });
             setIsDeleting(false);
         }
-        setDeleteConfirmationText('');
-        setIsConfirmingDelete(false);
     };
 
     const handleCepInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
