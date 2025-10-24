@@ -51,11 +51,34 @@ export const SearchFormContent: React.FC<SearchFormContentProps> = memo(({ crite
     const [localCargo, setLocalCargo] = useState(criteria.cargo);
     const debouncedCargo = useDebounce(localCargo, 500);
 
-    useEffect(() => { setLocalKeyword(criteria.palavraChave); }, [criteria.palavraChave]);
-    useEffect(() => { setLocalCargo(criteria.cargo); }, [criteria.cargo]);
+    // Sincroniza o estado local quando os critérios do pai mudam (ex: ao limpar um filtro)
+    useEffect(() => {
+        setLocalKeyword(criteria.palavraChave);
+    }, [criteria.palavraChave]);
 
-    useEffect(() => { if (debouncedKeyword !== criteria.palavraChave) onCriteriaChange(prev => ({ ...prev, palavraChave: debouncedKeyword })); }, [debouncedKeyword, criteria.palavraChave, onCriteriaChange]);
-    useEffect(() => { if (debouncedCargo !== criteria.cargo) onCriteriaChange(prev => ({ ...prev, cargo: debouncedCargo })); }, [debouncedCargo, criteria.cargo, onCriteriaChange]);
+    useEffect(() => {
+        setLocalCargo(criteria.cargo);
+    }, [criteria.cargo]);
+
+    // Sincroniza o estado do pai quando o valor local debounced muda (ex: digitação do usuário)
+    useEffect(() => {
+        onCriteriaChange(prev => {
+            // Compara com o estado anterior para evitar atualizações redundantes ou loops
+            if (prev.palavraChave !== debouncedKeyword) {
+                return { ...prev, palavraChave: debouncedKeyword };
+            }
+            return prev;
+        });
+    }, [debouncedKeyword, onCriteriaChange]);
+
+    useEffect(() => {
+        onCriteriaChange(prev => {
+            if (prev.cargo !== debouncedCargo) {
+                return { ...prev, cargo: debouncedCargo };
+            }
+            return prev;
+        });
+    }, [debouncedCargo, onCriteriaChange]);
 
     const toggleAccordion = (section: string) => setOpenAccordion(prev => prev === section ? null : section);
 
@@ -130,7 +153,7 @@ export const SearchFormContent: React.FC<SearchFormContentProps> = memo(({ crite
                     <div>
                         <label htmlFor="abrangencia" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Abrangência</label>
                         <div className="relative">
-                            <select id="abrangencia" value={criteria.estado} onChange={handleEstadoChange} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
+                            <select id="abrangencia" value={criteria.estado} onChange={handleEstadoChange} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
                                 <optgroup label="Geral"><option value="brasil">Todo o Brasil</option><option value="nacional">Apenas âmbito Nacional</option></optgroup>
                                 <optgroup label="Por região">{Object.keys(ESTADOS_POR_REGIAO).map((regiao) => (<option key={`regiao-${regiao}`} value={`regiao-${regiao.toLowerCase()}`}>{`Região ${regiao}`}</option>))}</optgroup>
                                 {Object.entries(ESTADOS_POR_REGIAO).map(([regiao, estados]: [string, Estado[]]) => (<optgroup label={regiao} key={regiao}>{estados.map((uf: Estado) => (<option key={uf.sigla} value={uf.sigla}>{uf.nome}</option>))}</optgroup>))}
@@ -159,7 +182,7 @@ export const SearchFormContent: React.FC<SearchFormContentProps> = memo(({ crite
                 <div>
                     <label htmlFor="abrangencia" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Abrangência</label>
                     <div className="relative">
-                        <select id="abrangencia" value={criteria.estado} onChange={handleEstadoChange} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
+                        <select id="abrangencia" value={criteria.estado} onChange={handleEstadoChange} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
                             <optgroup label="Geral"><option value="brasil">Todo o Brasil</option><option value="nacional">Apenas âmbito Nacional</option></optgroup>
                             <optgroup label="Por região">{Object.keys(ESTADOS_POR_REGIAO).map((regiao) => (<option key={`regiao-${regiao}`} value={`regiao-${regiao.toLowerCase()}`}>{`Região ${regiao}`}</option>))}</optgroup>
                             {Object.entries(ESTADOS_POR_REGIAO).map(([regiao, estados]: [string, Estado[]]) => (<optgroup label={regiao} key={regiao}>{estados.map((uf: Estado) => (<option key={uf.sigla} value={uf.sigla}>{uf.nome}</option>))}</optgroup>))}
@@ -170,7 +193,7 @@ export const SearchFormContent: React.FC<SearchFormContentProps> = memo(({ crite
                 <div className="space-y-5 pt-4 border-t border-dashed border-gray-200 dark:border-gray-700/60 mt-4">
                     <div className="relative">
                         <label htmlFor="cidadeFiltro" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Cidade</label>
-                        <select id="cidadeFiltro" value={criteria.cidadeFiltro} onChange={(e) => onCriteriaChange(prev => ({...prev, cidadeFiltro: e.target.value }))} disabled={isCityDataLoading || cities.length === 0} className="w-full text-base pl-3 pr-10 py-2 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors disabled:bg-gray-100 dark:disabled:bg-gray-800/50 disabled:cursor-not-allowed appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
+                        <select id="cidadeFiltro" value={criteria.cidadeFiltro} onChange={(e) => onCriteriaChange(prev => ({...prev, cidadeFiltro: e.target.value }))} disabled={isCityDataLoading || cities.length === 0} className="w-full text-base pl-3 pr-10 py-2 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors disabled:bg-gray-100 dark:disabled:bg-gray-800/50 disabled:cursor-not-allowed appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
                             <option value="">{isCityDataLoading ? 'Carregando cidades...' : 'Todas as cidades'}</option>{cities.map(city => (<option key={city.normalizedName} value={city.name}>{city.name}</option>))}
                         </select>
                     </div>
@@ -206,7 +229,7 @@ export const SearchFormContent: React.FC<SearchFormContentProps> = memo(({ crite
                 <div>
                     <label htmlFor="sort" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Ordenar resultados por</label>
                     <div className="relative">
-                        <select id="sort" value={criteria.sort} onChange={(e) => onCriteriaChange(prev => ({ ...prev, sort: e.target.value as OpenJobsSortOption }))} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
+                        <select id="sort" value={criteria.sort} onChange={(e) => onCriteriaChange(prev => ({ ...prev, sort: e.target.value as OpenJobsSortOption }))} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
                             {sortOptions.map(option => ( <option key={option.value} value={option.value}>{option.label}</option> ))}
                         </select>
                     </div>
@@ -278,7 +301,7 @@ export const PredictedNewsFormContent: React.FC<PredictedNewsFormContentProps> =
             <div>
                 <label htmlFor="location-predicted" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Localização</label>
                 <div className="relative">
-                    <select id="location-predicted" value={criteria.location} onChange={e => onCriteriaChange(prev => ({ ...prev, location: e.target.value }))} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
+                    <select id="location-predicted" value={criteria.location} onChange={e => onCriteriaChange(prev => ({ ...prev, location: e.target.value }))} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
                         <option value="brasil">Todo o Brasil</option>
                         <optgroup label="Por região">{Object.keys(ESTADOS_POR_REGIAO).map((regiao) => (<option key={`regiao-${regiao}`} value={`regiao-${regiao.toLowerCase()}`}>{`Região ${regiao}`}</option>))}</optgroup>
                         {Object.entries(ESTADOS_POR_REGIAO).map(([regiao, estados]: [string, Estado[]]) => (
@@ -310,7 +333,7 @@ export const PredictedNewsFormContent: React.FC<PredictedNewsFormContentProps> =
                     <div>
                         <label htmlFor="year-predicted" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Ano</label>
                         <div className="relative">
-                            <select id="year-predicted" value={criteria.year} onChange={e => onCriteriaChange(prev => ({ ...prev, year: e.target.value }))} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
+                            <select id="year-predicted" value={criteria.year} onChange={e => onCriteriaChange(prev => ({ ...prev, year: e.target.value }))} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
                                 <option value="todos">Todos</option>
                                 {years.map(y => <option key={y} value={y}>{y}</option>)}
                             </select>
@@ -319,7 +342,7 @@ export const PredictedNewsFormContent: React.FC<PredictedNewsFormContentProps> =
                     <div>
                         <label htmlFor="month-predicted" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Mês</label>
                         <div className="relative">
-                            <select id="month-predicted" value={criteria.month} onChange={e => onCriteriaChange(prev => ({ ...prev, month: e.target.value }))} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
+                            <select id="month-predicted" value={criteria.month} onChange={e => onCriteriaChange(prev => ({ ...prev, month: e.target.value }))} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
                                 <option value="todos">Todos</option>
                                 {months.map(m => <option key={m} value={m}>{monthNames[m - 1]}</option>)}
                             </select>
@@ -331,8 +354,8 @@ export const PredictedNewsFormContent: React.FC<PredictedNewsFormContentProps> =
                 <div>
                     <label htmlFor="sort-predicted" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Ordenar resultados por</label>
                     <div className="relative">
-                        <select id="sort-predicted" value={criteria.sort} onChange={e => onCriteriaChange(prev => ({ ...prev, sort: e.target.value as ArticleSortOption }))} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
-                            {articleSortOptions.map(option => ( <option key={option.value} value={option.value}>{option.label}</option> ))}
+                        <select id="sort-predicted" value={criteria.sort} onChange={e => onCriteriaChange(prev => ({ ...prev, sort: e.target.value as ArticleSortOption }))} className="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3e%3cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3e%3c/svg%3e')] bg-no-repeat bg-[center_right_0.5rem]">
+                            {articleSortOptions.map(option => ( <option key={option.value} value={option.value}>{option.label}</option>))}
                         </select>
                     </div>
                 </div>

@@ -21,7 +21,6 @@ import { AuthProvider } from './contexts/AuthContext';
 import { UserDataProvider } from './contexts/UserDataContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { ModalManager, ModalProvider } from './contexts/ModalContext';
-import './index.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

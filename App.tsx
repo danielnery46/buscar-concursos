@@ -26,10 +26,12 @@ import { InitialLoadErrorDisplay } from './components/StateDisplays';
 import { Header } from './components/Header';
 import { ConnectionErrorBanner } from './components/ConnectionErrorBanner';
 
-// Lazy-load all page components to improve initial load time through code-splitting.
-const SearchPage = lazy(() => import('./components/SearchPage'));
-const PredictedJobsPage = lazy(() => import('./components/PredictedJobsPage'));
-const NewsPage = lazy(() => import('./components/NewsPage'));
+// Persist page state by importing them statically instead of lazy loading.
+import SearchPage from './components/SearchPage';
+import PredictedJobsPage from './components/PredictedJobsPage';
+import NewsPage from './components/NewsPage';
+
+// Other pages can be lazy-loaded as their state is less critical to preserve.
 const SettingsPage = lazy(() => import('./components/SettingsPage'));
 const SupportPage = lazy(() => import('./components/SupportPage'));
 const RssPage = lazy(() => import('./components/RssPage'));
@@ -64,7 +66,8 @@ const App: React.FC = () => {
     
     const mainContentRef = useRef<HTMLDivElement>(null);
 
-    // Memoize callbacks to stabilize props and prevent unnecessary re-renders in child components.
+    // Memoize callbacks to stabilize props and prevent unnecessary re-renders in child components,
+    // which was causing focus trap issues in the filter panels.
     const setIsSearchFiltersOpen = useCallback((isOpen: boolean) => setOpenFilterPanel(isOpen ? 'search' : null), []);
     const setIsPredictedFiltersOpen = useCallback((isOpen: boolean) => setOpenFilterPanel(isOpen ? 'predicted' : null), []);
     const setIsNewsFiltersOpen = useCallback((isOpen: boolean) => setOpenFilterPanel(isOpen ? 'news' : null), []);
@@ -134,47 +137,6 @@ const App: React.FC = () => {
     
     const isAppLoading = authLoading || !isUserDataLoaded || !isSettingsLoaded;
 
-    const renderActiveTab = () => {
-        switch (activeTab) {
-            case 'search':
-                return <SearchPage 
-                            isActive={activeTab === 'search'}
-                            mainContentRef={mainContentRef}
-                            isFiltersOpen={openFilterPanel === 'search'}
-                            setIsFiltersOpen={setIsSearchFiltersOpen}
-                            onFilterCountChange={(count: number) => setFilterCounts(p => ({...p, search: count}))}
-                            cityDataCache={cityDataCache}
-                            loadCitiesForState={loadCitiesForState}
-                        />;
-            case 'predicted':
-                return <PredictedJobsPage
-                            isActive={activeTab === 'predicted'}
-                            mainContentRef={mainContentRef}
-                            isFiltersOpen={openFilterPanel === 'predicted'}
-                            setIsFiltersOpen={setIsPredictedFiltersOpen}
-                            onFilterCountChange={(count: number) => setFilterCounts(p => ({...p, predicted: count}))}
-                        />;
-            case 'news':
-                return <NewsPage
-                            isActive={activeTab === 'news'}
-                            mainContentRef={mainContentRef}
-                            isFiltersOpen={openFilterPanel === 'news'}
-                            setIsFiltersOpen={setIsNewsFiltersOpen}
-                            onFilterCountChange={(count: number) => setFilterCounts(p => ({...p, news: count}))}
-                        />;
-            case 'settings':
-                return <SettingsPage setActiveTab={setActiveTab} />;
-            case 'support':
-                return <SupportPage />;
-            case 'rss':
-                return <RssPage cityDataCache={cityDataCache} loadCitiesForState={loadCitiesForState} />;
-            case 'auth':
-                return <AuthPage view={authView} onViewChange={setAuthView} initialEmail={user?.email} />;
-            default:
-                return null;
-        }
-    };
-
     return (
         <div className="flex flex-col h-screen bg-slate-100 dark:bg-black text-gray-800 dark:text-gray-200">
             <Header 
@@ -192,9 +154,46 @@ const App: React.FC = () => {
                         {appInfraError ? (
                             <InitialLoadErrorDisplay title="Erro de Infraestrutura" message="Não foi possível carregar dados essenciais da aplicação, como a lista de cidades. A busca por distância pode não funcionar." />
                         ) : (
-                            <Suspense fallback={<div className="flex-grow flex items-center justify-center"><div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-500"></div></div>}>
-                                {renderActiveTab()}
-                            </Suspense>
+                            <>
+                                {/* Persistent Tabs */}
+                                <div className={activeTab === 'search' ? 'flex flex-col flex-grow' : 'hidden'}>
+                                    <SearchPage 
+                                        isActive={activeTab === 'search'}
+                                        mainContentRef={mainContentRef}
+                                        isFiltersOpen={openFilterPanel === 'search'}
+                                        setIsFiltersOpen={setIsSearchFiltersOpen}
+                                        onFilterCountChange={(count: number) => setFilterCounts(p => ({...p, search: count}))}
+                                        cityDataCache={cityDataCache}
+                                        loadCitiesForState={loadCitiesForState}
+                                    />
+                                </div>
+                                <div className={activeTab === 'predicted' ? 'flex flex-col flex-grow' : 'hidden'}>
+                                    <PredictedJobsPage
+                                        isActive={activeTab === 'predicted'}
+                                        mainContentRef={mainContentRef}
+                                        isFiltersOpen={openFilterPanel === 'predicted'}
+                                        setIsFiltersOpen={setIsPredictedFiltersOpen}
+                                        onFilterCountChange={(count: number) => setFilterCounts(p => ({...p, predicted: count}))}
+                                    />
+                                </div>
+                                <div className={activeTab === 'news' ? 'flex flex-col flex-grow' : 'hidden'}>
+                                    <NewsPage
+                                        isActive={activeTab === 'news'}
+                                        mainContentRef={mainContentRef}
+                                        isFiltersOpen={openFilterPanel === 'news'}
+                                        setIsFiltersOpen={setIsNewsFiltersOpen}
+                                        onFilterCountChange={(count: number) => setFilterCounts(p => ({...p, news: count}))}
+                                    />
+                                </div>
+
+                                {/* Non-Persistent (Lazy-Loaded) Tabs */}
+                                <Suspense fallback={<div className="flex-grow flex items-center justify-center"><div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-500"></div></div>}>
+                                    {activeTab === 'settings' && <SettingsPage setActiveTab={setActiveTab} />}
+                                    {activeTab === 'support' && <SupportPage />}
+                                    {activeTab === 'rss' && <RssPage cityDataCache={cityDataCache} loadCitiesForState={loadCitiesForState} />}
+                                    {activeTab === 'auth' && <AuthPage view={authView} onViewChange={setAuthView} initialEmail={user?.email} />}
+                                </Suspense>
+                            </>
                         )}
                     </main>
                 )}

@@ -13,12 +13,13 @@ interface ModalProps {
 
 interface CepInputModalProps extends ModalProps {
     onSave: (cep: string) => void;
+    isLoggedIn: boolean;
 }
 
 /**
  * Modal para solicitar o CEP do usuário para calcular rotas de viagem.
  */
-export function CepInputModal({ isOpen, onClose, onSave }: CepInputModalProps) {
+export function CepInputModal({ isOpen, onClose, onSave, isLoggedIn }: CepInputModalProps) {
     const [cep, setCep] = useState('');
     const [error, setError] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
@@ -57,6 +58,10 @@ export function CepInputModal({ isOpen, onClose, onSave }: CepInputModalProps) {
       setCep(value);
       if (error) setError('');
     };
+
+    const descriptionText = isLoggedIn
+        ? "Para traçar a rota até o local do concurso, precisamos do seu CEP. Ele será salvo na sua conta para facilitar futuras consultas em qualquer dispositivo."
+        : "Para traçar a rota até o local do concurso, precisamos do seu CEP. Ele será salvo apenas no seu navegador para facilitar futuras consultas.";
     
     return (
         <ModalBase isOpen={isOpen} onClose={onClose} ariaLabelledBy="cep-input-modal-title">
@@ -70,7 +75,7 @@ export function CepInputModal({ isOpen, onClose, onSave }: CepInputModalProps) {
                 containerClasses="max-w-md"
               >
                 <main className="p-4 sm:p-6 space-y-4">
-                    <p className="text-base text-gray-600 dark:text-gray-400 text-justify hyphens-auto">Para traçar a rota até o local do concurso, precisamos do seu CEP. Ele será salvo apenas no seu navegador para facilitar futuras consultas.</p>
+                    <p className="text-base text-gray-600 dark:text-gray-400 text-justify hyphens-auto">{descriptionText}</p>
                     <div>
                         <label htmlFor="cep-input" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Seu CEP</label>
                         <Input

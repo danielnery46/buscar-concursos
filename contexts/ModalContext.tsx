@@ -13,6 +13,7 @@ import {
     DataMigrationModal
 } from '../components/modals';
 import { useUserData } from './UserDataContext';
+import { useAuth } from './AuthContext';
 
 type ModalType =
     | 'webContent'
@@ -54,6 +55,7 @@ const ModalContext = createContext<ModalContextType | undefined>(undefined);
 export const ModalManager: React.FC = () => {
     const { modalType, modalProps, closeModal, openModal } = useModal();
     const { setCidadeRota } = useUserData();
+    const { user } = useAuth();
 
     if (!modalType) {
         return null;
@@ -92,7 +94,7 @@ export const ModalManager: React.FC = () => {
         case 'changelog':
             return <ChangelogModal isOpen={true} onClose={closeModal} />;
         case 'cepInput':
-            return <CepInputModal isOpen={true} onClose={closeModal} onSave={handleSaveCepAndOpenRoute} />;
+            return <CepInputModal isOpen={true} onClose={closeModal} onSave={handleSaveCepAndOpenRoute} isLoggedIn={!!user} />;
         case 'tutorial':
             return <InteractiveTutorial isOpen={true} onClose={handleTutorialClose} />;
         case 'defaultSearch':

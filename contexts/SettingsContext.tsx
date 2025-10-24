@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, FC } from 'react';
+import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, FC, useRef } from 'react';
 import type { Theme, AccessibilitySettings, Json } from '../types';
 import { useAuth } from './AuthContext';
 import { supabase } from '../utils/supabase';
@@ -24,12 +24,7 @@ interface SettingsContextType {
 }
 
 const defaultSettings: AccessibilitySettings = { highContrast: false, largerText: false, reduceMotion: false, uiScale: 100, openLinksInModal: true, showQuickAccess: true, dyslexicFont: false, highlightLinks: false, textSpacing: false, grayscale: false };
-const getLocalItem = (key: string, defaultValue: any) => {
-    try {
-        const item = localStorage.getItem(key);
-        return item ? JSON.parse(item) : defaultValue;
-    } catch { return defaultValue; }
-};
+
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 interface SettingsProviderProps {
@@ -45,13 +40,27 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
   
   const debouncedTheme = useDebounce(theme, 1500);
   const debouncedAccessibilitySettings = useDebounce(accessibilitySettings, 1500);
+  
+  const initialLoadDone = useRef(false);
+  const lastUserId = useRef(user?.id);
 
-  // Load initial settings
+  // This effect manages a flag to ensure save operations only run after initial data is loaded.
+  useEffect(() => {
+    if (user?.id !== lastUserId.current) {
+        initialLoadDone.current = false;
+        lastUserId.current = user?.id;
+    }
+    if (isSettingsLoaded && !initialLoadDone.current) {
+        initialLoadDone.current = true;
+    }
+  }, [user, isSettingsLoaded]);
+
+
+  // Load initial settings from cloud or local storage
   useEffect(() => {
     const loadInitialSettings = async () => {
         if (authLoading) return;
 
-        // This check must be identical to the one in UserDataContext to prevent deadlocks.
         const isDifferent = (key: string, defaultValue: any) => {
             const item = localStorage.getItem(key);
             if (item === null) return false;
@@ -62,7 +71,7 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
                 if (key === THEME_KEY) {
                     return item !== defaultValue;
                 }
-                return true; // Assume modified if parsing fails
+                return true;
             }
         };
 
@@ -81,7 +90,6 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
 
         if (user && anyLocalDataIsModified()) {
             console.log("SettingsContext: User logged in with modified local data. Awaiting migration decision.");
-            // Don't load anything yet. Wait for the migrationDecision event from UserDataContext.
             return;
         }
 
@@ -108,7 +116,7 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
         console.log(`SettingsContext received migration decision: ${action}`);
         const settingsKeys = [THEME_KEY, ACCESSIBILITY_SETTINGS_KEY];
         
-        if (!user) { // Safeguard
+        if (!user) { 
             settingsKeys.forEach(key => localStorage.removeItem(key));
             setIsSettingsLoaded(true);
             return;
@@ -118,9 +126,8 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
 
         if (action === 'migrate') {
             const localTheme = localStorage.getItem(THEME_KEY) as Theme | null;
-            const localSettings = getLocalItem(ACCESSIBILITY_SETTINGS_KEY, null);
+            const localSettings = JSON.parse(localStorage.getItem(ACCESSIBILITY_SETTINGS_KEY) || 'null');
 
-            // Merge with local data taking precedence for settings.
             const mergedTheme = localTheme && localTheme !== 'auto' ? localTheme : (cloudData?.theme || 'auto');
             const mergedSettings = { ...defaultSettings, ...(cloudData?.accessibility_settings as object || {}), ...(localSettings || {}) };
             
@@ -141,9 +148,9 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
     };
 }, [user]);
 
-  // Debounced save for Theme
+  // Debounced save for Theme, guarded by initialLoadDone flag.
   useEffect(() => {
-    if (!isSettingsLoaded) return;
+    if (!initialLoadDone.current) return;
     const saveTheme = async () => {
         if (user) {
             const { error } = await supabase.from('user_data').upsert({ id: user.id, theme: debouncedTheme });
@@ -153,11 +160,11 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
         }
     };
     saveTheme();
-  }, [debouncedTheme, user, isSettingsLoaded]);
+  }, [debouncedTheme]);
   
-  // Debounced save for Accessibility Settings
+  // Debounced save for Accessibility Settings, guarded by initialLoadDone flag.
   useEffect(() => {
-    if (!isSettingsLoaded) return;
+    if (!initialLoadDone.current) return;
     const saveAccessibilitySettings = async () => {
         if (user) {
             const { error } = await supabase.from('user_data').upsert({ id: user.id, accessibility_settings: debouncedAccessibilitySettings as unknown as Json });
@@ -167,7 +174,7 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
         }
     };
     saveAccessibilitySettings();
-  }, [debouncedAccessibilitySettings, user, isSettingsLoaded]);
+  }, [debouncedAccessibilitySettings]);
 
   // Apply theme to DOM
   useEffect(() => {

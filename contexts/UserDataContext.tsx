@@ -54,21 +54,19 @@ const keyToColumnMap: { [key: string]: string } = {
 
 const usePersistentState = <T,>(value: T, user: User | null, isLoaded: boolean, key: string) => {
     const debouncedValue = useDebounce(value, 1500);
-    // This ref tracks if the initial data for the current user has been loaded.
-    // It prevents saving the default/stale state during the loading process.
     const initialLoadDone = useRef(false);
     const lastUserId = useRef(user?.id);
 
     // Effect to manage the initial load state.
     useEffect(() => {
-        // If user changes (login/logout), reset the load flag.
+        // If user changes (login/logout), reset the load flag to wait for new data.
         if (user?.id !== lastUserId.current) {
             initialLoadDone.current = false;
             lastUserId.current = user?.id;
         }
 
         // Once `isLoaded` becomes true for the current user/session, mark initial load as done.
-        // This ensures we don't save anything until the first load is complete.
+        // This ensures we don't save anything until the first data load is complete.
         if (isLoaded && !initialLoadDone.current) {
             initialLoadDone.current = true;
         }
@@ -76,7 +74,8 @@ const usePersistentState = <T,>(value: T, user: User | null, isLoaded: boolean, 
 
     // Effect to save the debounced value.
     useEffect(() => {
-        // Do not save if the initial data load for the current user/session is not complete.
+        // The crucial guard: DO NOT save if the initial data load for the current session is not complete.
+        // This prevents saving the default/stale state during the login transition.
         if (!initialLoadDone.current) {
             return;
         }
@@ -97,7 +96,7 @@ const usePersistentState = <T,>(value: T, user: User | null, isLoaded: boolean, 
         };
 
         saveState();
-    }, [debouncedValue, user, key]); // Note: `isLoaded` is NOT a dependency here.
+    }, [debouncedValue, key]);
 };
 
 
