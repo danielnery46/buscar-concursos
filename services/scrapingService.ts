@@ -48,13 +48,37 @@ const jobMapper = (item: any): ProcessedJob => ({
 });
 
 const predictedJobMapper = (item: any): ProcessedPredictedJob => {
-    const [day, month, year] = item.publication_date.split('/').map(Number);
+    let dateObject: Date;
+    let formattedDate: string = item.publication_date; // fallback to original
+
+    if (item.publication_date) {
+        // The DB now likely provides a standard date string (e.g., 'YYYY-MM-DD' or ISO 8601)
+        // that new Date() can parse. This replaces the old 'DD/MM/YYYY' parsing.
+        dateObject = new Date(item.publication_date);
+        
+        // If parsing was successful, format it to DD/MM/YYYY for display.
+        if (dateObject instanceof Date && !isNaN(dateObject.valueOf())) {
+            // Using UTC methods to prevent timezone shifts from date-only strings.
+            const day = String(dateObject.getUTCDate()).padStart(2, '0');
+            const month = String(dateObject.getUTCMonth() + 1).padStart(2, '0');
+            const year = dateObject.getUTCFullYear();
+            formattedDate = `${day}/${month}/${year}`;
+        } else {
+            // If parsing fails (e.g., unexpected format), keep original text but mark date as invalid.
+            dateObject = new Date('invalid');
+        }
+    } else {
+        // Handle null or undefined publication_date
+        dateObject = new Date('invalid');
+        formattedDate = 'Data não informada';
+    }
+
     return {
-        date: item.publication_date,
+        date: formattedDate,
         title: item.title,
         link: item.link,
         source: item.source,
-        dateObject: new Date(year, month - 1, day),
+        dateObject: dateObject, // Will be used for sorting
         mentionedStates: item.mentioned_states || [],
     };
 };
@@ -105,7 +129,7 @@ function buildBaseJobQuery(selectString: string, criteria: SearchCriteria, signa
             const regionKeyRaw = criteria.estado.replace('regiao-', '');
             const regionKey = Object.keys(ESTADOS_POR_REGIAO).find(k => k.toLowerCase() === regionKeyRaw);
             if (regionKey) {
-                const regionStates = ESTADOS_POR_REGIAO[regionKey].map(s => s.sigla);
+                const regionStates = ESTADOS_POR_REGIAO[regionKey as keyof typeof ESTADOS_POR_REGIAO].map(s => s.sigla);
                 // Use .or() with 'cs' (contains) for jsonb array filtering.
                 const orFilter = regionStates.map(state => `mentioned_states.cs.["${state}"]`).join(',');
                 query = query.or(orFilter);
@@ -312,7 +336,7 @@ export async function fetchArticles(table: 'predicted_openings' | 'news_articles
             const regionKeyRaw = location.replace('regiao-', '');
             const regionKey = Object.keys(ESTADOS_POR_REGIAO).find(k => k.toLowerCase() === regionKeyRaw);
             if (regionKey) {
-                const regionStates = ESTADOS_POR_REGIAO[regionKey].map(s => s.sigla);
+                const regionStates = ESTADOS_POR_REGIAO[regionKey as keyof typeof ESTADOS_POR_REGIAO].map(s => s.sigla);
                 // Use .or() with 'cs' (contains) for jsonb array filtering
                 const orFilter = regionStates.map(state => `mentioned_states.cs.["${state}"]`).join(',');
                 query = query.or(orFilter);
@@ -324,22 +348,33 @@ export async function fetchArticles(table: 'predicted_openings' | 'news_articles
         }
     }
     
-    // Filtro de data por string matching (dd/mm/yyyy)
+    // The database now uses a proper date/timestamp type, so we use date range filters.
     if (year !== 'todos') {
-        const datePattern = `%/${month !== 'todos' ? String(month).padStart(2, '0') : '%'}/${year}`;
-        query = query.like('publication_date', datePattern);
-    } else if (month !== 'todos') {
-        const datePattern = `%/${String(month).padStart(2, '0')}/%`;
-        query = query.like('publication_date', datePattern);
+        const y = parseInt(year, 10);
+        let startDate, endDate;
+
+        if (month !== 'todos') {
+            const m = parseInt(month, 10);
+            // Month in JS Date is 0-indexed, so m-1.
+            startDate = new Date(Date.UTC(y, m - 1, 1));
+            // The end date is the first day of the next month (exclusive).
+            endDate = new Date(Date.UTC(y, m, 1));
+        } else {
+            // Filter by the entire year.
+            startDate = new Date(Date.UTC(y, 0, 1));
+            endDate = new Date(Date.UTC(y + 1, 0, 1));
+        }
+        
+        query = query.gte('publication_date', startDate.toISOString())
+                     .lt('publication_date', endDate.toISOString());
     }
 
     if (sources && sources.length > 0) {
         query = query.in('source', sources);
     }
     
-    // A ordenação por data com uma coluna de texto não é ideal no DB.
-    // Usamos o ID como um proxy razoável para a ordem de inserção.
-    query = query.order('id', { ascending: sort === 'date-asc' });
+    // The `publication_date` column is now a proper date/timestamp type, so we can sort directly on it.
+    query = query.order('publication_date', { ascending: sort === 'date-asc', nullsFirst: false });
 
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -354,12 +389,8 @@ export async function fetchArticles(table: 'predicted_openings' | 'news_articles
 
         const items = (data || []).map(predictedJobMapper);
         
-        // A ordenação final por data real é feita no lado do cliente para a página atual.
-        items.sort((a, b) => {
-            const timeA = a.dateObject.getTime();
-            const timeB = b.dateObject.getTime();
-            return sort === 'date-asc' ? timeA - timeB : timeB - a.dateObject.getTime();
-        });
+        // This client-side sort is no longer needed as the database now handles sorting for the entire dataset.
+        // It was also incorrect as it only sorted the current page.
 
         return { items, count: count ?? 0 };
     } catch (error: any) {
