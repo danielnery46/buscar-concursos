@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { copyToClipboard } from '../../utils/helpers';
 import { Button } from '../ui/Button';
-import { CheckIcon, CloseIcon, ExternalLinkIcon, ShareIcon } from '../Icons';
+import { CheckIcon, CloseIcon, ExternalLinkIcon, ShareIcon, AlertTriangleIcon } from '../Icons';
 
 interface ModalProps {
     isOpen: boolean;
@@ -20,18 +20,18 @@ interface WebContentModalProps extends ModalProps {
  * Uma visualização em tela cheia para exibir conteúdo da web, tratando a oscilação de renderização do iframe ao fechar.
  */
 export function WebContentModal({ isOpen, onClose, url, title }: WebContentModalProps) {
-    const [isLoading, setIsLoading] = useState(true);
     const [isRendered, setIsRendered] = useState(false);
     const [isActive, setIsActive] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
     const [copied, setCopied] = useState(false);
+
+    const isBlockedSite = url && url.includes('jcconcursos.com.br');
 
     useEffect(() => {
         if (isOpen) {
             setIsClosing(false);
             setIsRendered(true);
             document.body.style.overflow = 'hidden';
-            setIsLoading(true);
             const openTimer = setTimeout(() => setIsActive(true), 10);
             return () => clearTimeout(openTimer);
         } else if (isRendered) {
@@ -115,24 +115,41 @@ export function WebContentModal({ isOpen, onClose, url, title }: WebContentModal
                 </div>
             </header>
             <main className="relative h-full pt-16 bg-slate-100 dark:bg-gray-950 overflow-hidden">
-                {isLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-gray-950 z-10" aria-label="Carregando conteúdo">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+                {isBlockedSite ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-8">
+                        <div className="w-full max-w-md">
+                            <AlertTriangleIcon className="h-12 w-12 text-amber-500 mx-auto" />
+                            <h3 className="mt-4 text-2xl font-bold text-gray-800 dark:text-gray-100">Não é possível abrir esta página aqui</h3>
+                            <p className="mt-2 text-base text-gray-600 dark:text-gray-400 text-justify hyphens-auto">
+                                Por questões de segurança, o site <strong>jcconcursos.com.br</strong> não permite ser exibido dentro de outros aplicativos. Para ver o conteúdo, por favor, abra-o em uma nova aba.
+                            </p>
+                            <div className="mt-6">
+                                <a 
+                                    href={url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-950 h-10 px-4 py-2 rounded-lg text-sm bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
+                                >
+                                    <ExternalLinkIcon className="h-5 w-5" />
+                                    <span>Abrir em Nova Aba</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="w-full h-full relative">
+                        <iframe
+                            loading="lazy"
+                            src={url}
+                            title={title}
+                            className="w-[calc(100%/0.95)] h-[calc(100%/0.95)] border-none bg-white dark:bg-gray-900 transform scale-95 origin-top-left"
+                            sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-presentation allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
+                        ></iframe>
+                        <div 
+                            className={`absolute inset-0 bg-slate-100 dark:bg-gray-950 pointer-events-none ${isClosing ? 'opacity-100' : 'opacity-0'}`}
+                        ></div>
                     </div>
                 )}
-                <div className={`w-full h-full relative transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'}`}>
-                    <iframe
-                        loading="lazy"
-                        src={url}
-                        title={title}
-                        onLoad={() => setIsLoading(false)}
-                        className="w-[calc(100%/0.95)] h-[calc(100%/0.95)] border-none bg-white dark:bg-gray-900 transform scale-95 origin-top-left"
-                        sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-presentation allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
-                    ></iframe>
-                    <div 
-                        className={`absolute inset-0 bg-slate-100 dark:bg-gray-950 pointer-events-none ${isClosing ? 'opacity-100' : 'opacity-0'}`}
-                    ></div>
-                </div>
             </main>
         </div>
     );

@@ -73,6 +73,53 @@
     }
 
     /* ==========================================================================
+       Marquee Auto-Scroll Animation
+       ========================================================================== */
+    @keyframes marquee {
+      from { transform: translateX(0); }
+      /* Anima até a largura de um bloco de conteúdo, criando um loop contínuo */
+      to { transform: translateX(-50%); }
+    }
+
+    .marquee-container {
+      display: flex;
+      overflow: hidden;
+      position: relative;
+      width: 100%;
+    }
+
+    .marquee-container.has-marquee-mask {
+      /* Máscara de gradiente para efeito de fade nas bordas */
+      -webkit-mask-image: linear-gradient(to right, transparent, black 1.5rem, black calc(100% - 1.5rem), transparent);
+      mask-image: linear-gradient(to right, transparent, black 1.5rem, black calc(100% - 1.5rem), transparent);
+    }
+
+
+    .marquee-track {
+      display: flex;
+      flex-shrink: 0;
+    }
+
+    .marquee-content {
+      display: flex;
+      flex-shrink: 0;
+      align-items: center;
+      gap: 0.5rem; /* gap-2 entre as pílulas */
+      /* Adiciona espaçamento à direita para criar o espaço para o loop */
+      padding-right: 0.5rem; 
+    }
+
+    .animate-marquee {
+      /* Usa uma variável CSS para duração dinâmica, com um fallback */
+      animation: marquee var(--marquee-duration, 25s) linear infinite;
+    }
+
+    .marquee-container:hover .animate-marquee {
+      animation-play-state: paused;
+    }
+
+
+    /* ==========================================================================
        Estilos de Componentes Específicos
        ========================================================================== */
     /* Hide scrollbar for carousels */

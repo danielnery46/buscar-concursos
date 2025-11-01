@@ -60,8 +60,8 @@ export function CepInputModal({ isOpen, onClose, onSave, isLoggedIn }: CepInputM
     };
 
     const descriptionText = isLoggedIn
-        ? "Para traçar a rota até o local do concurso, precisamos do seu CEP. Ele será salvo na sua conta para facilitar futuras consultas em qualquer dispositivo."
-        : "Para traçar a rota até o local do concurso, precisamos do seu CEP. Ele será salvo apenas no seu navegador para facilitar futuras consultas.";
+        ? "Para buscar os concursos mais próximos, precisamos do seu CEP. Ele será salvo na sua conta para facilitar futuras consultas em qualquer dispositivo."
+        : "Para buscar os concursos mais próximos, precisamos do seu CEP. Ele será salvo apenas no seu navegador para facilitar futuras consultas.";
     
     return (
         <ModalBase isOpen={isOpen} onClose={onClose} ariaLabelledBy="cep-input-modal-title">
@@ -97,7 +97,7 @@ export function CepInputModal({ isOpen, onClose, onSave, isLoggedIn }: CepInputM
                 </main>
                 <footer className="px-6 pb-6 pt-2">
                     <Button onClick={handleSubmit} className="w-full">
-                        Salvar e Traçar Rota
+                        Salvar e Buscar
                     </Button>
                 </footer>
               </ContentModalLayout>

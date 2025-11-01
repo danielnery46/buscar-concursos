@@ -74,10 +74,10 @@ function getErrorMessage(error: any): string {
 function normalizarData(textoData: string | null | undefined): string {
     const getHojeFormatado = (): string => {
         const hoje = new Date();
-        const dia = String(hoje.getDate()).padStart(2, '0');
-        const mes = String(hoje.getMonth() + 1).padStart(2, '0');
         const ano = hoje.getFullYear();
-        return `${dia}/${mes}/${ano}`;
+        const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+        const dia = String(hoje.getDate()).padStart(2, '0');
+        return `${ano}-${mes}-${dia}`;
     };
 
     if (!textoData || typeof textoData !== 'string') {
@@ -94,7 +94,7 @@ function normalizarData(textoData: string | null | undefined): string {
         if (ano.length === 2) {
             ano = `20${ano}`;
         }
-        return `${dia}/${mes}/${ano}`;
+        return `${ano}-${mes}-${dia}`;
     }
 
     // Tenta formato "DD de [mês] de YYYY"
@@ -108,7 +108,7 @@ function normalizarData(textoData: string | null | undefined): string {
         const dia = match[1].padStart(2, '0');
         const mes = meses[match[2]];
         const ano = match[3];
-        if (dia && mes && ano) return `${dia}/${mes}/${ano}`;
+        if (dia && mes && ano) return `${ano}-${mes}-${dia}`;
     }
 
     return getHojeFormatado(); // Fallback final
@@ -233,7 +233,7 @@ const pciConfig = {
             const link = new URL(href, baseUrl).href;
             const title = linkElement.textContent?.trim().replace(/\s+/g, ' ') || 'Título не informado';
             items.push({
-              publication_date: date,
+              publication_date: normalizarData(date),
               title: title,
               link: link,
               source: 'PCI Concursos',

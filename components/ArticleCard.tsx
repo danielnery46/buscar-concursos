@@ -1,5 +1,5 @@
 import React, { useState, useEffect, memo, useRef, useCallback } from 'react';
-import { ProcessedPredictedJob, IconProps } from '../types';
+import { ProcessedPredictedJob, IconProps, ViewMode } from '../types';
 import { copyToClipboard, prefetchUrl } from '../utils/helpers';
 import {
     CalendarIcon,
@@ -28,9 +28,9 @@ const InfoPill = memo(function InfoPill({ icon, text, pillType }: { icon: React.
     };
 
     return (
-        <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${colorClasses[pillType]}`}>
+        <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold flex-shrink-0 ${colorClasses[pillType]}`}>
             {React.cloneElement(icon, { className: "h-3.5 w-3.5" })}
-            <span className="truncate">{text}</span>
+            <span className="whitespace-nowrap">{text}</span>
         </div>
     );
 });
@@ -39,9 +39,10 @@ const InfoPill = memo(function InfoPill({ icon, text, pillType }: { icon: React.
 interface ArticleCardProps {
     item: ProcessedPredictedJob;
     itemType: 'predicted' | 'news';
+    viewMode: ViewMode;
 }
 
-export const ArticleCard = memo<ArticleCardProps>(({ item, itemType }) => {
+export const ArticleCard = memo<ArticleCardProps>(({ item, itemType, viewMode }) => {
     const { accessibilitySettings } = useSettings();
     const { openLinksInModal } = accessibilitySettings;
     const { handleCardClick } = useCardInteraction({ link: item.link, title: item.title, openInModal: openLinksInModal });
@@ -108,6 +109,60 @@ export const ArticleCard = memo<ArticleCardProps>(({ item, itemType }) => {
             handleCardClick(e);
         }
     }, [handleCardClick]);
+
+    if (viewMode === 'list') {
+        return (
+            <div
+                ref={cardRef}
+                onClick={handleCardClick}
+                onKeyDown={handleKeyDown}
+                role="button"
+                tabIndex={0}
+                title={openLinksInModal ? "Ctrl+clique para abrir em nova aba" : "Ctrl+clique para abrir na janela"}
+                className="relative group bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl p-4 hover:border-indigo-500/50 dark:hover:border-indigo-500/80 transition-all duration-200 transform hover:-translate-y-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-slate-900 focus:ring-indigo-500"
+            >
+                <div className="flex items-start gap-4">
+                    <div className="flex-1 min-w-0">
+                        <h3 className="text-base sm:text-lg font-bold text-gray-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors leading-tight line-clamp-2 text-justify hyphens-auto" title={item.title}>
+                            {item.title}
+                        </h3>
+                    </div>
+                    <div className="flex-shrink-0 ml-auto text-slate-400 group-hover:text-indigo-400 transition-colors ctrl-key-icon" title={itemType === 'predicted' ? "Ver previsão" : "Ler notícia"} aria-hidden="true">
+                        { openLinksInModal ? (
+                            <>
+                                <MaximizeIcon className="h-5 w-5 icon-default" />
+                                <ExternalLinkIcon className="h-5 w-5 icon-ctrl" />
+                            </>
+                        ) : (
+                            <>
+                                <ExternalLinkIcon className="h-5 w-5 icon-default" />
+                                <MaximizeIcon className="h-5 w-5 icon-ctrl" />
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between gap-4">
+                    <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                        {item.source && <span className="font-semibold">Fonte: {item.source}</span>}
+                        <span className="flex items-center gap-1.5">
+                            <CalendarIcon className="h-3.5 w-3.5" /> {item.date}
+                        </span>
+                        {item.mentionedStates.length > 0 && (
+                            <span className="flex items-center gap-1.5">
+                                <MapIcon className="h-3.5 w-3.5" /> {item.mentionedStates.join(', ')}
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0 -mr-1.5">
+                        <button onClick={handleShareClick} aria-label={copied ? "Link copiado!" : "Compartilhar"} title={copied ? "Link copiado!" : "Compartilhar"} className={`p-1.5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 ${copied ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+                            {copied ? <CheckIcon className="h-5 w-5" /> : <ShareIcon className="h-5 w-5"/>}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
     
     return (
         <div 
@@ -142,7 +197,7 @@ export const ArticleCard = memo<ArticleCardProps>(({ item, itemType }) => {
             
             <div className="flex-grow my-2"></div>
             
-            <div className="mt-2 flex flex-wrap gap-2 items-center">
+            <div className="mt-2 flex flex-wrap gap-2 items-center py-1">
                 <InfoPill icon={<CalendarIcon />} text={item.date} pillType="roles" />
                 {item.mentionedStates.slice(0, 3).map(state => <InfoPill key={state} icon={<MapIcon />} text={state} pillType="location" />)}
             </div>

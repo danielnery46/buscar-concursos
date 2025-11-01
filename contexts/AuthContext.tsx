@@ -35,6 +35,7 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    // A persistência de critérios de busca na sessão foi removida.
   };
 
   const value = {

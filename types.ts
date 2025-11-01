@@ -13,6 +13,7 @@ export type Json =
   | Json[];
 
 export type Theme = 'light' | 'dark' | 'auto';
+export type ViewMode = 'grid' | 'list';
 
 export interface IconProps {
   className?: string;
@@ -113,6 +114,7 @@ export interface AccessibilitySettings {
   highlightLinks: boolean;
   textSpacing: boolean;
   grayscale: boolean;
+  viewMode: ViewMode;
 }
 
 export interface SummaryData {

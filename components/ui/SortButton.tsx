@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from './Button';
-import { CheckIcon, SortIcon } from '../Icons';
+import { CheckIcon, ChevronDownIcon, SortIcon } from '../Icons';
 
 interface SortButtonProps<T extends string> {
     options: { value: T; label: string }[];
@@ -30,20 +30,25 @@ export function SortButton<T extends string>({ options, value, onChange }: SortB
       };
     }, []);
 
+    const selectedLabel = options.find(o => o.value === value)?.label || 'Ordenar';
+
     return (
-      <div className="relative" ref={menuRef}>
+      <div className="relative flex-shrink-0" ref={menuRef}>
         <Button
-            variant="ghost"
-            size="icon"
+            variant="secondary"
+            size="md"
             onClick={handleToggle}
-            aria-label="Ordenar resultados"
+            aria-label={`Ordenar por: ${selectedLabel}`}
             aria-haspopup="true"
             aria-expanded={isOpen}
+            className="w-10 sm:w-auto px-2.5 sm:px-3"
         >
-          <SortIcon className="h-6 w-6" />
+          <SortIcon className="h-5 w-5" />
+          <span className="ml-2 hidden sm:inline">{selectedLabel}</span>
+          <ChevronDownIcon className={`h-4 w-4 ml-1 hidden sm:inline-block transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
         </Button>
         {isOpen && (
-          <div className="absolute bottom-full right-0 mb-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10 p-1 origin-bottom-right menu-enter-active">
+          <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10 p-1 origin-top-right menu-enter-active">
             <div className="py-1" role="menu" aria-orientation="vertical">
               {options.map(option => (
                 <button

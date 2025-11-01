@@ -141,7 +141,7 @@ export const Header: React.FC<HeaderProps> = memo(({ activeTab, setActiveTab, fi
     const { openModal } = useModal();
     
     return (
-        <header className="flex items-center justify-between h-16 sm:h-20 px-4 sm:px-6 bg-slate-100 dark:bg-black border-b border-slate-200 dark:border-gray-800 z-30 flex-shrink-0">
+        <header className="fixed top-0 left-0 right-0 flex items-center justify-between h-16 sm:h-20 px-4 sm:px-6 bg-slate-100/80 dark:bg-black/80 backdrop-blur-sm border-b border-slate-200/80 dark:border-gray-800/80 z-30">
             <button
                 type="button"
                 onClick={() => openModal('donation', {})}

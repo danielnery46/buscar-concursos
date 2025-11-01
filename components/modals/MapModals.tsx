@@ -1,16 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { ProcessedJob } from '../../types';
-import { LocationIcon, RouteIcon } from '../Icons';
-import { ModalBase, ContentModalLayout } from './ModalBase';
+import { LocationIcon, CheckIcon, CloseIcon, ExternalLinkIcon, ShareIcon } from '../Icons';
+import { useUserData } from '../../contexts/UserDataContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { copyToClipboard } from '../../utils/helpers';
 
 interface ModalProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
-// Helper para obter uma cidade e estado limpos para consultas de mapa.
 const getMapDestination = (job: ProcessedJob): string => {
-    // Regex para remover prefixos institucionais como "Prefeitura de"
     const cleanCityForRouting = (city: string | null | undefined): string => {
         if (!city) return '';
         const cityMatch = city.trim().match(
@@ -23,21 +26,17 @@ const getMapDestination = (job: ProcessedJob): string => {
     };
 
     let destinationCity = '';
-    // Prioridade 1: Usar a cidade efetiva limpa
     if (job.cidadeEfetiva) {
         destinationCity = cleanCityForRouting(job.cidadeEfetiva);
     } 
-    // Prioridade 2: Fallback para limpar a localidade
     else {
         destinationCity = cleanCityForRouting(job.localidade.split(',')[0]);
     }
 
     let state = '';
-    // Tenta obter o estado de mentionedStates primeiro
     if (job.mentionedStates && job.mentionedStates.length > 0) {
         state = job.mentionedStates[0];
     } 
-    // Fallback para extrair da string de localidade
     else {
         const parts = job.localidade.split(/[\/\-]/);
         if (parts.length > 1) {
@@ -48,9 +47,7 @@ const getMapDestination = (job: ProcessedJob): string => {
         }
     }
     
-    // Verificação final para evitar enviar apenas "Prefeitura" ou similar se a limpeza falhar.
     if (['prefeitura', 'camara', 'câmara'].includes(destinationCity.toLowerCase())) {
-        // Se a limpeza resultou em um termo genérico, a localidade pode ser melhor.
         const cleanedLocalidade = cleanCityForRouting(job.localidade.split(/[\/\-,]/)[0]);
         if (cleanedLocalidade) {
             destinationCity = cleanedLocalidade;
@@ -60,62 +57,174 @@ const getMapDestination = (job: ProcessedJob): string => {
     return state ? `${destinationCity}, ${state}` : destinationCity;
 };
 
+const MAP_ANIMATION_DURATION = 300;
+const MAP_BUFFER_DELAY = 50;
 
-interface BaseMapModalProps extends ModalProps {
-    modalId: string;
-    headerIcon: React.ReactNode;
-    headerTitle: React.ReactNode;
+interface FullScreenMapLayoutProps {
+    isOpen: boolean;
+    onClose: () => void;
+    title: React.ReactNode;
+    urlForShare: string;
+    titleForShare: string;
     mapSrc: string;
-    mapTitle: string;
     externalLink: string;
-    externalLinkText: string;
-    externalLinkIcon: React.ReactNode;
+    topContent?: React.ReactNode;
 }
 
-const BaseMapModal: React.FC<BaseMapModalProps> = ({
-    isOpen, onClose, modalId, headerIcon, headerTitle, mapSrc, mapTitle, externalLink, externalLinkText, externalLinkIcon
-}) => {
-    const [isMapLoading, setIsMapLoading] = useState(true);
+const FullScreenMapLayout: React.FC<FullScreenMapLayoutProps> = ({ isOpen, onClose, title, urlForShare, titleForShare, mapSrc, externalLink, topContent }) => {
+    const [isRendered, setIsRendered] = useState(false);
+    const [isActive, setIsActive] = useState(false);
+    const [isClosing, setIsClosing] = useState(false);
+    const [copied, setCopied] = useState(false);
+    const modalRef = useRef<HTMLDivElement>(null);
+
+    useFocusTrap(isRendered, modalRef, onClose);
 
     useEffect(() => {
-        if (isOpen) setIsMapLoading(true);
-    }, [isOpen]);
+        if (isOpen) {
+            setIsClosing(false);
+            setIsRendered(true);
+            document.body.style.overflow = 'hidden';
+            const openTimer = setTimeout(() => setIsActive(true), 10);
+            return () => clearTimeout(openTimer);
+        } else if (isRendered) {
+            setIsClosing(true);
+            const slideOutTimer = setTimeout(() => {
+                setIsActive(false);
+            }, MAP_BUFFER_DELAY);
+            const unmountTimer = setTimeout(() => {
+                setIsRendered(false);
+                document.body.style.overflow = 'unset';
+            }, MAP_ANIMATION_DURATION + MAP_BUFFER_DELAY);
+            return () => {
+                clearTimeout(slideOutTimer);
+                clearTimeout(unmountTimer);
+            };
+        }
+    }, [isOpen, isRendered]);
+
+    const handleClose = useCallback(() => {
+        onClose();
+    }, [onClose]);
+
+    const handleShare = useCallback(async () => {
+        if (!urlForShare) return;
+        setCopied(false);
+
+        const shareData = {
+            title: titleForShare,
+            text: `Confira este link: ${titleForShare}`,
+            url: urlForShare,
+        };
+
+        try {
+            if (navigator.share) {
+                await navigator.share(shareData);
+            } else {
+                throw new Error('Web Share API not available.');
+            }
+        } catch (error) {
+            const success = await copyToClipboard(urlForShare);
+            if (success) {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2500);
+            }
+        }
+    }, [urlForShare, titleForShare]);
+
+    if (!isRendered) return null;
 
     return (
-        <ModalBase isOpen={isOpen} onClose={onClose} ariaLabelledBy={modalId}>
-            {({ showContent, modalRef }) => (
-                <ContentModalLayout
-                    showContent={showContent}
-                    modalRef={modalRef}
-                    onClose={onClose}
-                    headerIcon={headerIcon}
-                    headerTitle={headerTitle}
-                    containerClasses="max-w-3xl h-[80vh]"
-                >
-                    <div className="relative flex-1 bg-gray-200 dark:bg-gray-800">
-                        {isMapLoading && (
-                            <div className="absolute inset-0 flex items-center justify-center" aria-label="Carregando mapa">
-                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
-                            </div>
-                        )}
+        <div
+            ref={modalRef}
+            tabIndex={-1}
+            className={`fixed inset-0 bg-slate-100 dark:bg-gray-950 z-50 transition-transform duration-300 ease-out ${isActive ? 'translate-y-0' : 'translate-y-full'}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={titleForShare}
+        >
+            <header className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800 z-20 flex items-center justify-between px-4 sm:px-6">
+                <div className="flex-1 min-w-0 mr-4">{title}</div>
+                <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" onClick={handleShare} aria-label="Compartilhar">
+                        {copied ? <CheckIcon className="h-6 w-6 text-emerald-500" /> : <ShareIcon className="h-6 w-6 text-gray-600 dark:text-gray-300" />}
+                    </Button>
+                    <a href={externalLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800/80 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" aria-label="Abrir em nova aba">
+                        <ExternalLinkIcon className="h-6 w-6 text-gray-600 dark:text-gray-300" />
+                    </a>
+                    <Button variant="ghost" size="icon" onClick={handleClose} aria-label="Fechar">
+                        <CloseIcon className="h-6 w-6 text-gray-600 dark:text-gray-300" />
+                    </Button>
+                </div>
+            </header>
+            <main className={`relative h-full pt-16 bg-slate-100 dark:bg-gray-950 overflow-hidden flex flex-col`}>
+                {topContent}
+                <div className="relative flex-1 bg-gray-200 dark:bg-gray-800">
+                    <div className="w-full h-full relative">
                         <iframe
                             loading="lazy"
-                            width="100%" height="100%" src={mapSrc} title={mapTitle}
-                            onLoad={() => setIsMapLoading(false)}
-                            className={`dark:filter dark:invert-[100%] dark:hue-rotate-180 transition-opacity duration-300 border-none ${isMapLoading ? 'opacity-0' : 'opacity-100'}`}
+                            width="100%" height="100%" src={mapSrc} title={titleForShare}
+                            className={`dark:filter dark:invert-[100%] dark:hue-rotate-180 transition-opacity duration-300 border-none`}
                         ></iframe>
+                        <div className={`absolute inset-0 bg-slate-100 dark:bg-gray-950 pointer-events-none ${isClosing ? 'opacity-100' : 'opacity-0'}`}></div>
                     </div>
-                    <footer className="p-4 sm:p-5 border-t border-gray-200 dark:border-gray-800 flex-shrink-0">
-                        <a href={externalLink} target="_blank" rel="noopener noreferrer" className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-[1.02] active:scale-95">
-                            {externalLinkIcon}
-                            {externalLinkText}
-                        </a>
-                    </footer>
-                </ContentModalLayout>
-            )}
-        </ModalBase>
+                </div>
+            </main>
+        </div>
     );
 };
+
+interface CepInputSectionProps {
+    onTraceRoute: (cep: string) => void;
+    isLoggedIn: boolean;
+}
+
+const CepInputSection: React.FC<CepInputSectionProps> = ({ onTraceRoute, isLoggedIn }) => {
+    const [cepInput, setCepInput] = useState('');
+    const [cepError, setCepError] = useState('');
+
+    const handleCepChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        let value = e.target.value.replace(/\D/g, '');
+        if (value.length > 8) value = value.slice(0, 8);
+        if (value.length > 5) value = `${value.slice(0, 5)}-${value.slice(5)}`;
+        setCepInput(value);
+        if (cepError) setCepError('');
+    };
+
+    const handleTraceClick = () => {
+        if (cepInput.replace(/\D/g, '').length !== 8) {
+            setCepError('Por favor, insira um CEP válido com 8 dígitos.');
+            return;
+        }
+        onTraceRoute(cepInput);
+    };
+
+    const description = isLoggedIn 
+        ? "Seu CEP será salvo na sua conta para futuras consultas."
+        : "Seu CEP será salvo apenas neste navegador.";
+
+    return (
+        <div className="space-y-3">
+            <p className="text-sm text-gray-600 dark:text-gray-400">{description}</p>
+            <div className="flex items-start gap-2">
+                <div className="flex-1">
+                    <Input
+                        type="text"
+                        value={cepInput}
+                        onChange={handleCepChange}
+                        icon={<LocationIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" />}
+                        className={cepError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}
+                        placeholder="Insira seu CEP de partida"
+                        maxLength={9}
+                    />
+                    {cepError && <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{cepError}</p>}
+                </div>
+                <Button onClick={handleTraceClick}>Traçar Rota</Button>
+            </div>
+        </div>
+    );
+};
+
 
 interface MapModalProps extends ModalProps {
     job: ProcessedJob | null;
@@ -126,55 +235,136 @@ export function MapModal({ isOpen, onClose, job }: MapModalProps) {
 
     const destination = encodeURIComponent(getMapDestination(job));
     
+    // --- URLs RESTAURADAS ---
+    // Esta é a URL original que estava funcionando para *pontos únicos*.
+    const mapSrc = `https://maps.google.com/maps?q=${destination}&t=&ie=UTF8&iwloc=&output=embed`;
+    const externalLink = `https://www.google.com/maps/search/?api=1&query=${destination}`;
+
+    const headerTitle = (
+        <div>
+            <h2 id="map-modal-title" className="text-base sm:text-lg font-bold text-gray-800 dark:text-gray-100 truncate">{job.orgao}</h2>
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 truncate">{job.cidadeEfetiva || job.localidade}</p>
+        </div>
+    );
+
     return (
-        <BaseMapModal
+        <FullScreenMapLayout
             isOpen={isOpen}
             onClose={onClose}
-            modalId="map-modal-title"
-            headerIcon={<LocationIcon className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />}
-            headerTitle={
-                <div>
-                    <h2 id="map-modal-title" className="text-lg font-bold text-gray-800 dark:text-gray-100">{job.orgao}</h2>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{job.cidadeEfetiva || job.localidade}</p>
-                </div>
-            }
-            mapSrc={`https://maps.google.com/maps?q=${destination}&t=&z=13&ie=UTF8&iwloc=&output=embed`}
-            mapTitle={`Mapa para ${job.orgao}`}
-            externalLink={`https://www.google.com/maps/search/?api=1&query=${destination}`}
-            externalLinkText="Abrir no Google Maps"
-            externalLinkIcon={<LocationIcon className="h-5 w-5 mr-2" />}
+            title={headerTitle}
+            urlForShare={job.link}
+            titleForShare={`Localização: ${job.orgao}`}
+            mapSrc={mapSrc}
+            externalLink={externalLink}
         />
     );
 }
 
 interface RouteMapModalProps extends ModalProps {
     job: ProcessedJob | null;
-    userCep?: string | null;
+    userCep: string | null;
+    filteredCity: string | null;
+    filteredState: string | null;
 }
 
-export function RouteMapModal({ isOpen, onClose, job, userCep }: RouteMapModalProps) {
-    if (!job || !userCep) return null;
+export function RouteMapModal({ isOpen, onClose, job, userCep, filteredCity, filteredState }: RouteMapModalProps) {
+    const { setCidadeRota } = useUserData();
+    const { user } = useAuth();
+    
+    const [originType, setOriginType] = useState<'user' | 'filter' | 'none'>('none');
+    const [currentUserCep, setCurrentUserCep] = useState(userCep || '');
 
-    const origin = encodeURIComponent(userCep);
-    const destination = encodeURIComponent(getMapDestination(job));
+    const destination = useMemo(() => job ? encodeURIComponent(getMapDestination(job)) : '', [job]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        setCurrentUserCep(userCep || '');
+
+        if (userCep) {
+            setOriginType('user');
+        } else if (filteredCity) {
+            setOriginType('filter');
+        } else {
+            setOriginType('none');
+        }
+    }, [isOpen, userCep, filteredCity]);
+
+    const { mapSrc, externalLink, headerTitleText } = useMemo(() => {
+        // --- CORREÇÃO APLICADA AQUI ---
+        // 'baseEmbedParams' agora NÃO tem '&iwloc='
+        // Isso permite que o Google Maps auto-ajuste o zoom para mostrar a rota inteira.
+        const baseEmbedParams = 'output=embed&t=&ie=UTF8'; 
+        
+        // URLs externas e de embed restauradas para o formato original (com os números)
+        const baseExternal = 'https://www.google.com/maps/';
+        
+        // URL para ponto único (sem origem)
+        let src = `https://maps.google.com/maps?${baseEmbedParams}&q=${destination}`;
+        let link = `${baseExternal}search/?api=1&query=${destination}`;
+        let title = `Localização: ${job?.orgao || ''}`;
+
+        const origin = (originType === 'user' && currentUserCep)
+            ? encodeURIComponent(currentUserCep)
+            : (originType === 'filter' && filteredCity && filteredState)
+            ? encodeURIComponent(`${filteredCity}, ${filteredState}`)
+            : null;
+
+        if (origin) {
+            // URL para ROTA (com origem e destino)
+            // Esta URL agora usará o auto-zoom correto no mobile.
+            src = `https://maps.google.com/maps?${baseEmbedParams}&saddr=${origin}&daddr=${destination}`;
+            link = `${baseExternal}dir/?api=1&origin=${origin}&destination=${destination}`;
+            title = `Rota para ${job?.orgao || ''}`;
+        }
+        
+        return { mapSrc: src, externalLink: link, headerTitleText: title };
+    }, [originType, currentUserCep, filteredCity, filteredState, destination, job]);
+    
+    const handleTraceFromCep = useCallback((newCep: string) => {
+        setCidadeRota(newCep);
+        setCurrentUserCep(newCep);
+        setOriginType('user');
+    }, [setCidadeRota]);
+
+    if (!job) return null;
+    
+    const showOriginTabs = !!currentUserCep && !!filteredCity;
+    const showCepInput = !currentUserCep;
+
+    const topContent = (
+        <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
+            {showOriginTabs ? (
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Traçar rota de:</span>
+                    <Button size="sm" variant={originType === 'user' ? 'primary' : 'secondary'} onClick={() => setOriginType('user')}>Minha Localização</Button>
+                    <Button size="sm" variant={originType === 'filter' ? 'primary' : 'secondary'} onClick={() => setOriginType('filter')}>Cidade do Filtro</Button>
+                </div>
+            ) : showCepInput ? (
+                <CepInputSection onTraceRoute={handleTraceFromCep} isLoggedIn={!!user} />
+            ) : (
+                 <p className="text-sm text-gray-600 dark:text-gray-400">Exibindo rota de sua localização salva.</p>
+            )}
+        </div>
+    );
+
+    const headerTitle = (
+        <div>
+            <h2 id="route-map-modal-title" className="text-base sm:text-lg font-bold text-gray-800 dark:text-gray-100 truncate">{headerTitleText}</h2>
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 truncate">{job.cidadeEfetiva || job.localidade}</p>
+        </div>
+    );
 
     return (
-        <BaseMapModal
+        <FullScreenMapLayout
             isOpen={isOpen}
             onClose={onClose}
-            modalId="route-map-modal-title"
-            headerIcon={<RouteIcon className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />}
-            headerTitle={
-                <div>
-                    <h2 id="route-map-modal-title" className="text-lg font-bold text-gray-800 dark:text-gray-100">Rota para {job.orgao}</h2>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{job.cidadeEfetiva || job.localidade}</p>
-                </div>
-            }
-            mapSrc={`https://maps.google.com/maps?saddr=${origin}&daddr=${destination}&output=embed`}
-            mapTitle={`Rota para ${job.orgao}`}
-            externalLink={`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`}
-            externalLinkText="Abrir no Google Maps"
-            externalLinkIcon={<LocationIcon className="h-5 w-5 mr-2" />}
+            title={headerTitle}
+            urlForShare={job.link}
+            titleForShare={`Rota para: ${job.orgao}`}
+            mapSrc={mapSrc}
+            externalLink={externalLink}
+            topContent={topContent}
         />
     );
 }

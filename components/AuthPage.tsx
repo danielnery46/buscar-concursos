@@ -386,5 +386,4 @@ const AuthPage: React.FC<AuthPageProps> = ({ view, onViewChange, initialEmail = 
     return null;
 };
 
-// FIX: Add default export for React.lazy compatibility
 export default AuthPage;

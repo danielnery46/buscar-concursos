@@ -27,11 +27,8 @@ const escapeXml = (unsafe: string | null | undefined): string => {
 
 const toRfc822 = (dateStr: string | null): string | null => {
     if (!dateStr) return null;
-    const parts = dateStr.split('/');
-    if (parts.length !== 3) return null;
-    // Format is DD/MM/YYYY, convert to YYYY-MM-DD for reliable parsing
-    const isoDateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
-    const date = new Date(isoDateStr);
+    // The date format is now YYYY-MM-DD, which can be parsed directly.
+    const date = new Date(dateStr);
     if (isNaN(date.getTime())) return null;
     return date.toUTCString();
 };
@@ -53,7 +50,7 @@ serve(async (req) => {
     let query = supabase
       .from("news_articles")
       .select("title, link, publication_date, source")
-      .order("id", { ascending: false })
+      .order("publication_date", { ascending: false })
       .limit(limit);
 
     if (searchParams.get("searchTerm")) {
@@ -76,10 +73,12 @@ serve(async (req) => {
     }
     if (searchParams.get("year")) {
         const year = searchParams.get("year")!;
-        const datePattern = `%/${searchParams.get("month") ? String(searchParams.get("month")).padStart(2, '0') : '%'}/${year}`;
+        const month = searchParams.get("month");
+        const datePattern = `${year}-${month ? String(month).padStart(2, '0') : '%'}-%`;
         query = query.like('publication_date', datePattern);
     } else if (searchParams.get("month")) {
-        const datePattern = `%/${String(searchParams.get("month")).padStart(2, '0')}/%`;
+        const month = searchParams.get("month")!;
+        const datePattern = `%-{String(month).padStart(2, '0')}-%`;
         query = query.like('publication_date', datePattern);
     }
 
@@ -90,7 +89,9 @@ serve(async (req) => {
     const now = new Date();
 
     const items = (articles ?? []).map((c) => {
-        const description = `Fonte: ${c.source} | Publicado em: ${c.publication_date}`;
+        const dateParts = c.publication_date?.split('-');
+        const displayDate = dateParts ? `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}` : 'Data não informada';
+        const description = `Fonte: ${c.source} | Publicado em: ${displayDate}`;
         const pubDate = toRfc822(c.publication_date);
         return `
 <item>

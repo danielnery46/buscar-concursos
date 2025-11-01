@@ -21,50 +21,59 @@ export const useArticleSearch = (
     isUserDataLoaded: boolean,
     page: number,
     itemsPerPage: number,
-    isActive: boolean
+    isActive: boolean,
+    quickSearchTerm: string
 ) => {
-    const [criteria, setCriteria] = useState<PredictedCriteria>({ ...defaultPredictedValues, ...(defaultFilter || {}) });
+    const [criteria, setCriteria] = useState<PredictedCriteria>(defaultPredictedValues);
     const debouncedCriteria = useDebounce(criteria, 500);
     const [isLoading, setIsLoading] = useState(isActive);
     const [error, setError] = useState<string | null>(null);
     const [filteredItems, setFilteredItems] = useState<ProcessedPredictedJob[]>([]);
     const [totalItems, setTotalItems] = useState(0);
-    const [isInitialized, setIsInitialized] = useState(false);
+    const [isReadyToFetch, setIsReadyToFetch] = useState(false);
 
     useEffect(() => {
         if (isUserDataLoaded) {
-            setCriteria({ ...defaultPredictedValues, ...(defaultFilter || {}) });
-            setIsInitialized(true);
+            // ... (lógica inicial)
+            const initialCriteria = { ...defaultPredictedValues, ...(defaultFilter || {}) };
+            setCriteria(initialCriteria);
+            
+            const timer = setTimeout(() => {
+                setIsReadyToFetch(true);
+            }, 500); 
+
+            return () => clearTimeout(timer);
         }
-    }, [defaultFilter, isUserDataLoaded]);
+    }, [defaultFilter, isUserDataLoaded, table]);
+
 
     useEffect(() => {
-        if (!isActive || !isUserDataLoaded || !isInitialized) return;
+        if (!isActive || !isReadyToFetch) return;
         
         const controller = new AbortController();
         const fetchData = async () => {
             setIsLoading(true);
             setError(null);
             try {
-                const { items, count } = await fetchArticles(table, debouncedCriteria, page, itemsPerPage, controller.signal);
+                const { items, count } = await fetchArticles(table, debouncedCriteria, page, itemsPerPage, quickSearchTerm, controller.signal);
                 setFilteredItems(items);
                 setTotalItems(count);
+                setIsLoading(false); // <-- CORREÇÃO: Movido para o fim do 'try'
             } catch (err: any) {
-                if (err.name !== 'AbortError') {
+                // A lógica do 'catch' está correta
+                if (!controller.signal.aborted) {
                     setError(err.message || "Ocorreu um erro desconhecido ao buscar os artigos.");
                     console.error(`Error fetching articles from ${table}:`, err);
-                }
-            } finally {
-                if (!controller.signal.aborted) {
-                    setIsLoading(false);
+                    setIsLoading(false); // <-- CORREÇÃO: Adicionado aqui também
                 }
             }
+            // CORREÇÃO: Bloco 'finally' removido.
         };
 
         fetchData();
         return () => { controller.abort(); };
 
-    }, [debouncedCriteria, page, table, isActive]);
+    }, [debouncedCriteria, quickSearchTerm, page, table, isActive, isReadyToFetch, itemsPerPage]);
 
     return {
         criteria,

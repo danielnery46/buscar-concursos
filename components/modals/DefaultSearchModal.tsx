@@ -66,6 +66,11 @@ export function DefaultSearchModal({ isOpen, onClose, onSave, isCityDataLoading,
                                 isCityDataLoading={isCityDataLoading}
                                 cities={citiesForSelectedState}
                                 isModalView={true}
+                                // FIX: Pass required props with default/dummy values as they are not used in this context.
+                                onProximitySearch={() => {}}
+                                isProximityLoading={false}
+                                proximityError={null}
+                                cidadeRota=""
                            />
                         </div>
                     </main>

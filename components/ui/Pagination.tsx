@@ -32,18 +32,19 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
             <div className="flex items-center gap-2">
                 <Button
                     variant="secondary"
-                    size="md"
+                    size="icon"
+                    className="sm:w-auto sm:px-3"
                     onClick={onPrevious}
                     disabled={currentPage === 1}
                     aria-label="Página anterior"
                 >
-                    <ArrowLeftIcon className="h-4 w-4" />
-                    <span className="hidden sm:inline">Anterior</span>
+                    <ArrowLeftIcon className="h-5 w-5" />
+                    <span className="hidden sm:inline ml-2">Anterior</span>
                 </Button>
                 <div className="hidden md:flex items-center gap-2">
                     {paginationRange.map((pageNumber, index) => {
                         if (pageNumber === DOTS) {
-                            return <span key={`dots-${index}`} className="px-4 py-2 text-gray-500 dark:text-gray-400">...</span>;
+                            return <span key={`dots-${index}`} className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">...</span>;
                         }
 
                         return (
@@ -60,18 +61,19 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
                         );
                     })}
                 </div>
-                <div className="md:hidden text-sm font-medium text-gray-700 dark:text-gray-300 px-2">
+                <div className="md:hidden text-sm font-medium text-gray-700 dark:text-gray-300 px-2 tabular-nums">
                     Página {currentPage} de {totalPages}
                 </div>
                 <Button
                     variant="secondary"
-                    size="md"
+                    size="icon"
+                    className="sm:w-auto sm:px-3"
                     onClick={onNext}
                     disabled={currentPage === totalPages}
                     aria-label="Próxima página"
                 >
-                    <span className="hidden sm:inline">Próxima</span>
-                    <ArrowRightIcon className="h-4 w-4" />
+                    <span className="hidden sm:inline mr-2">Próxima</span>
+                    <ArrowRightIcon className="h-5 w-5" />
                 </Button>
             </div>
         </nav>

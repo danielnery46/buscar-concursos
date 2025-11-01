@@ -39,7 +39,8 @@ const getLocalItem = (key: string, defaultValue: any) => {
     } catch { return defaultValue; }
 };
 
-const defaultAccessibilitySettings: AccessibilitySettings = { highContrast: false, largerText: false, reduceMotion: false, uiScale: 100, openLinksInModal: true, showQuickAccess: true, dyslexicFont: false, highlightLinks: false, textSpacing: false, grayscale: false };
+// FIX: Added the missing `viewMode` property to align with the `AccessibilitySettings` type.
+const defaultAccessibilitySettings: AccessibilitySettings = { highContrast: false, largerText: false, reduceMotion: false, uiScale: 100, openLinksInModal: true, showQuickAccess: true, dyslexicFont: false, highlightLinks: false, textSpacing: false, grayscale: false, viewMode: 'grid' };
 
 // This maps the localStorage keys to the database column names.
 const keyToColumnMap: { [key: string]: string } = {
@@ -300,7 +301,7 @@ export const UserDataProvider: FC<UserDataProviderProps> = ({ children }) => {
             reader.onerror = () => reject(new Error("Falha ao ler o arquivo."));
             reader.readAsText(file);
         });
-    }, []);
+    }, [setFavoriteSearches, setFavoritePredictedFilters, setFavoriteNewsFilters, setDefaultSearch, setDefaultPredictedFilter, setDefaultNewsFilter, setCidadeRota]);
 
     const clearAllLocalData = useCallback(() => {
         localStorage.clear();

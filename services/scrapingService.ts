@@ -24,6 +24,19 @@ import { retryAsync } from '../utils/helpers';
 const JOB_OPENINGS_LIST_COLUMNS = 'title, organization, location, link, effective_city, logo_path, deadline_formatted, deadline_date, type, normalized_effective_city, max_salary_numeric, min_salary_numeric, vacancies_numeric, education_levels, parsed_salary_text, parsed_vacancies_text, mentioned_states, parsed_roles';
 const PREDICTED_ARTICLES_COLUMNS = 'id, publication_date, title, link, source, mentioned_states';
 
+// Helper function for full-text search with prefix matching
+const createTsQuery = (term: string): string => {
+    if (!term) return '';
+    const normalized = normalizeText(term);
+    // Split into words, filter out empty ones, add prefix operator, and join with spaces
+    // The 'websearch' type for textSearch will interpret spaces as AND operators.
+    return normalized
+      .split(/\s+/)
+      .filter(part => part.length > 0)
+      .map(part => `${part}:*`)
+      .join(' ');
+};
+
 const jobMapper = (item: any): ProcessedJob => ({
     titulo: item.title,
     orgao: item.organization,
@@ -48,62 +61,44 @@ const jobMapper = (item: any): ProcessedJob => ({
 });
 
 const predictedJobMapper = (item: any): ProcessedPredictedJob => {
-    let dateObject: Date;
-    let formattedDate: string = item.publication_date; // fallback to original
-
-    if (item.publication_date) {
-        // The DB now likely provides a standard date string (e.g., 'YYYY-MM-DD' or ISO 8601)
-        // that new Date() can parse. This replaces the old 'DD/MM/YYYY' parsing.
-        dateObject = new Date(item.publication_date);
-        
-        // If parsing was successful, format it to DD/MM/YYYY for display.
-        if (dateObject instanceof Date && !isNaN(dateObject.valueOf())) {
-            // Using UTC methods to prevent timezone shifts from date-only strings.
-            const day = String(dateObject.getUTCDate()).padStart(2, '0');
-            const month = String(dateObject.getUTCMonth() + 1).padStart(2, '0');
-            const year = dateObject.getUTCFullYear();
-            formattedDate = `${day}/${month}/${year}`;
-        } else {
-            // If parsing fails (e.g., unexpected format), keep original text but mark date as invalid.
-            dateObject = new Date('invalid');
-        }
-    } else {
-        // Handle null or undefined publication_date
-        dateObject = new Date('invalid');
-        formattedDate = 'Data não informada';
-    }
-
+    // A data agora vem no formato YYYY-MM-DD
+    const [year, month, day] = item.publication_date.split('-').map(Number);
     return {
-        date: formattedDate,
+        // Formata a data de volta para DD/MM/YYYY para exibição na UI
+        date: `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`,
         title: item.title,
         link: item.link,
         source: item.source,
-        dateObject: dateObject, // Will be used for sorting
+        // Cria o objeto Date para compatibilidade, embora a ordenação principal seja no DB
+        dateObject: new Date(year, month - 1, day),
         mentionedStates: item.mentioned_states || [],
     };
 };
 
-function buildBaseJobQuery(selectString: string, criteria: SearchCriteria, signal?: AbortSignal) {
+function buildBaseJobQuery(selectString: string, criteria: SearchCriteria, quickSearchTerm: string, signal?: AbortSignal) {
     let query = supabase.from('job_openings').select(selectString, { count: 'exact' });
     if (signal) {
         query = query.abortSignal(signal);
     }
+    
+    // Filtro por termo rápido (não salvo)
+    if (quickSearchTerm) {
+        const tsQuery = createTsQuery(quickSearchTerm);
+        if (tsQuery) {
+            query = query.textSearch('searchable_text', tsQuery, { config: 'portuguese', type: 'websearch' });
+        }
+    }
 
+    // Filtro por palavra-chave (salvo nos critérios)
     if (criteria.palavraChave) {
-        query = query.textSearch('searchable_text', `'${normalizeText(criteria.palavraChave)}'`, {
-            type: 'plain',
-            config: 'portuguese',
-        });
+        const tsQuery = createTsQuery(criteria.palavraChave);
+        if (tsQuery) {
+            query = query.textSearch('searchable_text', tsQuery, { config: 'portuguese', type: 'websearch' });
+        }
     }
 
     if (criteria.cargo) {
-        // Using 'textSearch' on 'education_level_text' provides a more precise search for job roles,
-        // as this column is the source for the 'parsed_roles' displayed on cards.
-        // The 'plain' type ensures whole-word matching, and the 'portuguese' config handles stemming.
-        query = query.textSearch('education_level_text', `'${normalizeText(criteria.cargo)}'`, {
-            type: 'plain',
-            config: 'portuguese',
-        });
+        query = query.ilike('education_level_text', `%${normalizeText(criteria.cargo)}%`);
     }
 
     if (criteria.escolaridade && criteria.escolaridade.length > 0) {
@@ -151,9 +146,9 @@ function buildBaseJobQuery(selectString: string, criteria: SearchCriteria, signa
     return query;
 }
 
-export async function fetchJobs(criteria: SearchCriteria, page: number, pageSize: number, type: 'concurso' | 'processo_seletivo' | 'all', signal?: AbortSignal) {
+export async function fetchJobs(criteria: SearchCriteria, page: number, pageSize: number, type: 'concurso' | 'processo_seletivo' | 'all', quickSearchTerm: string, signal?: AbortSignal) {
     const isDistanceSearch = criteria.distanciaRaio && criteria.cidadeFiltro && criteria.estado.length === 2;
-    let query = buildBaseJobQuery(JOB_OPENINGS_LIST_COLUMNS, criteria, signal);
+    let query = buildBaseJobQuery(JOB_OPENINGS_LIST_COLUMNS, criteria, quickSearchTerm, signal);
     
     if (type !== 'all') {
         query = query.eq('type', type);
@@ -246,9 +241,9 @@ export async function fetchJobs(criteria: SearchCriteria, page: number, pageSize
     }
 }
 
-export async function fetchJobsSummary(criteria: SearchCriteria, signal?: AbortSignal) {
+export async function fetchJobsSummary(criteria: SearchCriteria, quickSearchTerm: string, signal?: AbortSignal) {
     // Only select columns needed for summary to optimize payload
-    let query = buildBaseJobQuery('vacancies_numeric, max_salary_numeric', criteria, signal);
+    let query = buildBaseJobQuery('vacancies_numeric, max_salary_numeric', criteria, quickSearchTerm, signal);
     
     try {
         // Fetch all results in chunks to avoid timeout or memory issues on large queries.
@@ -319,16 +314,26 @@ export async function fetchJobsSummary(criteria: SearchCriteria, signal?: AbortS
     }
 }
 
-export async function fetchArticles(table: 'predicted_openings' | 'news_articles', criteria: PredictedCriteria, page: number, pageSize: number, signal?: AbortSignal) {
+export async function fetchArticles(table: 'predicted_openings' | 'news_articles', criteria: PredictedCriteria, page: number, pageSize: number, quickSearchTerm: string, signal?: AbortSignal) {
     let query = supabase.from(table).select(PREDICTED_ARTICLES_COLUMNS, { count: 'exact' });
     if (signal) {
         query = query.abortSignal(signal);
     }
 
     const { searchTerm, location, month, year, sources, sort } = criteria;
+    
+    if (quickSearchTerm) {
+        const tsQuery = createTsQuery(quickSearchTerm);
+        if (tsQuery) {
+            query = query.textSearch('normalized_title', tsQuery, { config: 'portuguese', type: 'websearch' });
+        }
+    }
 
     if (searchTerm) {
-        query = query.ilike('normalized_title', `%${normalizeText(searchTerm)}%`);
+        const tsQuery = createTsQuery(searchTerm);
+        if (tsQuery) {
+            query = query.textSearch('normalized_title', tsQuery, { config: 'portuguese', type: 'websearch' });
+        }
     }
 
     if (location !== 'brasil') {
@@ -348,33 +353,23 @@ export async function fetchArticles(table: 'predicted_openings' | 'news_articles
         }
     }
     
-    // The database now uses a proper date/timestamp type, so we use date range filters.
+    // Filtro de data por string matching (YYYY-MM-DD)
     if (year !== 'todos') {
-        const y = parseInt(year, 10);
-        let startDate, endDate;
-
-        if (month !== 'todos') {
-            const m = parseInt(month, 10);
-            // Month in JS Date is 0-indexed, so m-1.
-            startDate = new Date(Date.UTC(y, m - 1, 1));
-            // The end date is the first day of the next month (exclusive).
-            endDate = new Date(Date.UTC(y, m, 1));
-        } else {
-            // Filter by the entire year.
-            startDate = new Date(Date.UTC(y, 0, 1));
-            endDate = new Date(Date.UTC(y + 1, 0, 1));
-        }
-        
-        query = query.gte('publication_date', startDate.toISOString())
-                     .lt('publication_date', endDate.toISOString());
+        const datePattern = `${year}-${month !== 'todos' ? String(month).padStart(2, '0') : '%'}-%`;
+        query = query.like('publication_date', datePattern);
+    } else if (month !== 'todos') {
+        const datePattern = `%-${String(month).padStart(2, '0')}-%`;
+        query = query.like('publication_date', datePattern);
     }
+
 
     if (sources && sources.length > 0) {
         query = query.in('source', sources);
     }
     
-    // The `publication_date` column is now a proper date/timestamp type, so we can sort directly on it.
-    query = query.order('publication_date', { ascending: sort === 'date-asc', nullsFirst: false });
+    // A ordenação agora é feita no banco de dados na coluna de texto `publication_date`,
+    // que está no formato YYYY-MM-DD para garantir a ordenação correta.
+    query = query.order('publication_date', { ascending: sort === 'date-asc' });
 
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -389,9 +384,6 @@ export async function fetchArticles(table: 'predicted_openings' | 'news_articles
 
         const items = (data || []).map(predictedJobMapper);
         
-        // This client-side sort is no longer needed as the database now handles sorting for the entire dataset.
-        // It was also incorrect as it only sorted the current page.
-
         return { items, count: count ?? 0 };
     } catch (error: any) {
         const isAbortError = error.name === 'AbortError' || (error.message && error.message.includes('The operation was aborted'));
@@ -418,16 +410,39 @@ export async function fetchArticles(table: 'predicted_openings' | 'news_articles
 }
 
 export async function fetchSourcesForTable(table: 'predicted_openings' | 'news_articles'): Promise<string[]> {
-    const { data, error } = await supabase.from(table).select('source');
-    if (error) {
-        const lowerCaseMessage = (error.message || '').toLowerCase();
-        if (lowerCaseMessage.includes('networkerror') || lowerCaseMessage.includes('failed to fetch')) {
-            window.dispatchEvent(new CustomEvent('networkError'));
+    const allSources = new Set<string>();
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        const { data, error } = await supabase.from(table).select('source').range(from, to);
+
+        if (error) {
+            const lowerCaseMessage = (error.message || '').toLowerCase();
+            if (lowerCaseMessage.includes('networkerror') || lowerCaseMessage.includes('failed to fetch')) {
+                window.dispatchEvent(new CustomEvent('networkError'));
+            }
+            console.error(`Error fetching sources from ${table}:`, error);
+            return [];
         }
-        console.error(`Error fetching sources from ${table}:`, error);
-        return [];
+
+        if (data) {
+            for (const item of data) {
+                if (item.source) {
+                    allSources.add(item.source);
+                }
+            }
+        }
+
+        if (!data || data.length < pageSize) {
+            hasMore = false;
+        } else {
+            page++;
+        }
     }
-    // Use um Set para obter fontes únicas e depois converta para um array
-    const sources = new Set<string>(data.map((item: any) => item.source).filter(Boolean));
-    return Array.from(sources).sort();
+
+    return Array.from(allSources).sort();
 }

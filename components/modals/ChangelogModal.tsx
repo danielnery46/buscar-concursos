@@ -24,8 +24,19 @@ export function ChangelogModal({ isOpen, onClose }: ModalProps) {
                     <main className="p-4 sm:p-6 overflow-y-auto flex-1">
                         <div className="prose prose-base dark:prose-invert max-w-none text-justify hyphens-auto">
                             <div className="not-prose p-4 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-500/30 rounded-lg mb-4">
-                                <h3 className="text-lg font-bold text-indigo-800 dark:text-indigo-200">Novidades da versão 2.2</h3>
+                                <h3 className="text-lg font-bold text-indigo-800 dark:text-indigo-200">Novidades da versão 2.3</h3>
                                 <ul className="mt-2 space-y-2 list-disc list-outside pl-5 text-indigo-700 dark:text-indigo-300">
+                                    <li><span className="font-semibold">Barra de Busca Rápida:</span> Adicionada uma barra de busca rápida no topo das páginas de "Abertos", "Previstos" e "Notícias" para pesquisas ágeis sem abrir o painel de filtros.</li>
+                                    <li><span className="font-semibold">Alternador de Visualização:</span> Adicionado um botão para alternar rapidamente entre a visualização em grade e em lista.</li>
+                                    <li><span className="font-semibold">Melhorias nos Mapas:</span> O visualizador de mapas e a função "Traçar Rota" foram redesenhados para uma experiência mais fluida e intuitiva em tela cheia.</li>
+                                    <li><span className="font-semibold">Cálculo de Distância Aprimorado:</span> A busca por raio em KM agora utiliza distância real de condução em vez de linha reta, fornecendo resultados mais precisos.</li>
+                                    <li><span className="font-semibold">Correções de Ordenação:</span> Corrigidos bugs na ordenação de vagas, especialmente ao usar o filtro de distância.</li>
+                                    <li><span className="font-semibold">Melhorias e Correções Gerais:</span> Implementadas diversas melhorias de interface e correções de bugs em todo o aplicativo para aumentar a estabilidade e a usabilidade.</li>
+                                </ul>
+                            </div>
+                            <div className="not-prose p-4 bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-500/30 rounded-lg mb-4">
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">Novidades da versão 2.2</h3>
+                                <ul className="mt-2 space-y-2 list-disc list-outside pl-5 text-gray-700 dark:text-gray-300">
                                     <li><span className="font-semibold">Feeds RSS:</span> Adicionada uma nova página de "RSS Feeds" no menu. Agora você pode se inscrever para receber atualizações de vagas abertas, concursos previstos e notícias diretamente no seu leitor de RSS, inclusive criando feeds personalizados com seus filtros favoritos.</li>
                                 </ul>
                             </div>

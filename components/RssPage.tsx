@@ -104,9 +104,7 @@ const RssPage: React.FC<RssPageProps> = memo(({ cityDataCache, loadCitiesForStat
 
         if (activeTab === 'abertos') {
             baseUrl = `${supabaseUrl}/functions/v1/rss-abertos`;
-            // Cria uma cópia dos critérios, excluindo 'escolaridade' pois não é suportado nesta UI
-            const { escolaridade, ...rssCriteria } = openJobsCriteria;
-            queryString = buildQueryString(rssCriteria, systemDefaultValues);
+            queryString = buildQueryString(openJobsCriteria, systemDefaultValues);
         } else if (activeTab === 'previstos') {
             baseUrl = `${supabaseUrl}/functions/v1/rss-previstos`;
             queryString = buildQueryString(predictedCriteria, defaultPredictedValues);
@@ -165,7 +163,19 @@ const RssPage: React.FC<RssPageProps> = memo(({ cityDataCache, loadCitiesForStat
     const renderFilterForm = () => {
         switch(activeTab) {
             case 'abertos':
-                return <SearchFormContent criteria={openJobsCriteria} onCriteriaChange={setOpenJobsCriteria} isCityDataLoading={isCityDataLoading} cities={citiesForSelectedState} isModalView={true} isRssForm={true} />;
+                return <SearchFormContent 
+                    criteria={openJobsCriteria} 
+                    onCriteriaChange={setOpenJobsCriteria} 
+                    isCityDataLoading={isCityDataLoading} 
+                    cities={citiesForSelectedState} 
+                    isModalView={true} 
+                    isRssForm={true} 
+                    // FIX: Pass required props with default/dummy values as they are not used in this context.
+                    onProximitySearch={() => {}}
+                    isProximityLoading={false}
+                    proximityError={null}
+                    cidadeRota=""
+                />;
             case 'previstos':
                 return <PredictedNewsFormContent criteria={predictedCriteria} onCriteriaChange={setPredictedCriteria} isModalView={true} isRssForm={true} />;
             case 'noticias':
@@ -213,7 +223,8 @@ const RssPage: React.FC<RssPageProps> = memo(({ cityDataCache, loadCitiesForStat
                              <div className="p-6 border-t border-gray-200 dark:border-gray-800">
                                 <div className="mb-6">
                                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">1. Escolha o tipo de feed:</label>
-                                    <Tabs items={tabItems} activeTab={activeTab} onTabChange={setActiveTab} />
+                                    {/* FIX: The onTabChange prop now uses a lambda function to correctly match the expected type, preventing a TypeScript error. The cast ensures type safety. */}
+                                    <Tabs items={tabItems} activeTab={activeTab} onTabChange={(tabId) => setActiveTab(tabId as RssTab)} />
                                 </div>
 
                                 <div className="mb-6">

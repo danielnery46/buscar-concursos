@@ -15,6 +15,10 @@ interface SearchFormProps {
     cities: any[];
     summaryData: { totalOpportunities: number; totalVacancies: number; highestSalary: number; } | null;
     isLoading: boolean;
+    onProximitySearch: () => void;
+    isProximityLoading: boolean;
+    proximityError: string | null;
+    cidadeRota: string;
 }
 
 export const SearchForm: React.FC<SearchFormProps> = (props) => {
@@ -28,6 +32,10 @@ export const SearchForm: React.FC<SearchFormProps> = (props) => {
         onCriteriaChange: props.onCriteriaChange,
         isCityDataLoading: props.isCityDataLoading,
         cities: props.cities,
+        onProximitySearch: props.onProximitySearch,
+        isProximityLoading: props.isProximityLoading,
+        proximityError: props.proximityError,
+        cidadeRota: props.cidadeRota,
     };
     
     const summaryProps = props.summaryData ? {

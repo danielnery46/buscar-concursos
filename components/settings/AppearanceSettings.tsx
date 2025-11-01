@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
-import { AccessibilitySettings, Theme } from '../../types';
-import { MoonIcon, SunIcon, SunMoonIcon } from '../Icons';
+import { AccessibilitySettings, Theme, ViewMode } from '../../types';
+import { MoonIcon, SunIcon, SunMoonIcon, LayoutGridIcon, ListIcon } from '../Icons';
 import { Switch } from '../ui/Switch';
 
 interface AppearanceSettingsProps {
@@ -43,10 +43,44 @@ const ThemeSelector: React.FC<{ theme: Theme; onThemeChange: (theme: Theme, even
     );
 });
 
+const ViewModeSelector: React.FC<{ viewMode: ViewMode; onViewModeChange: (mode: ViewMode) => void; }> = memo(({ viewMode, onViewModeChange }) => {
+    const modes: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
+        { id: 'grid', label: 'Grade', icon: <LayoutGridIcon className="h-5 w-5" /> },
+        { id: 'list', label: 'Lista', icon: <ListIcon className="h-5 w-5" /> },
+    ];
+
+    return (
+        <div className="px-6 py-4">
+            <p className="font-semibold text-base text-gray-800 dark:text-gray-200">Modo de Visualização Padrão</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 text-justify hyphens-auto">Escolha como os resultados da busca de vagas abertas devem ser exibidos por padrão.</p>
+            <div className="p-1 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center gap-1 border border-gray-200 dark:border-gray-700/80">
+                {modes.map((m) => (
+                    <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => onViewModeChange(m.id)}
+                        className={`flex-1 flex items-center justify-center gap-2 px-2 py-2 text-sm font-semibold rounded-lg transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-gray-900 focus-visible:ring-indigo-500 ${
+                            viewMode === m.id
+                                ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                : 'text-gray-500 dark:text-gray-400 hover:bg-white/50 dark:hover:bg-gray-700/60'
+                        }`}
+                        aria-pressed={viewMode === m.id}
+                    >
+                        {m.icon}
+                        <span>{m.label}</span>
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+});
+
+
 export const AppearanceSettings: React.FC<AppearanceSettingsProps> = ({ theme, onThemeChange, accessibilitySettings, onSettingsChange }) => {
     return (
         <div className="divide-y divide-gray-100 dark:divide-gray-800/80">
             <ThemeSelector theme={theme} onThemeChange={onThemeChange} />
+            <ViewModeSelector viewMode={accessibilitySettings.viewMode || 'grid'} onViewModeChange={(mode) => onSettingsChange({ viewMode: mode })} />
             <Switch label="Abrir links externos em uma janela" description="Quando ativado, links de notícias e concursos abrem em uma janela de pré-visualização." checked={accessibilitySettings.openLinksInModal ?? true} onChange={(c) => onSettingsChange({ openLinksInModal: c })} />
             <Switch label="Mostrar Acesso Rápido de Favoritos" description="Exibe seus atalhos de buscas favoritas nas páginas de busca." checked={accessibilitySettings.showQuickAccess ?? true} onChange={(c) => onSettingsChange({ showQuickAccess: c })} />
             <div className="px-6 py-4">

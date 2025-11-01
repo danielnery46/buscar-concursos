@@ -6,14 +6,12 @@ import {
     RouteMapModal,
     DonationModal,
     ChangelogModal,
-    CepInputModal,
     InteractiveTutorial,
     DefaultSearchModal,
     DefaultPredictedNewsModal,
-    DataMigrationModal
+    DataMigrationModal,
+    CepInputModal
 } from '../components/modals';
-import { useUserData } from './UserDataContext';
-import { useAuth } from './AuthContext';
 
 type ModalType =
     | 'webContent'
@@ -21,23 +19,23 @@ type ModalType =
     | 'routeMap'
     | 'donation'
     | 'changelog'
-    | 'cepInput'
     | 'tutorial'
     | 'defaultSearch'
     | 'defaultPredictedNews'
-    | 'dataMigration';
+    | 'dataMigration'
+    | 'cepInput';
 
 interface ModalPropsMap {
     webContent: { url: string; title: string };
     map: { job: ProcessedJob };
-    routeMap: { job: ProcessedJob; userCep: string };
+    routeMap: { job: ProcessedJob; userCep: string | null; filteredCity: string | null; filteredState: string | null };
     donation: Record<string, never>;
     changelog: Record<string, never>;
-    cepInput: { job: ProcessedJob };
     tutorial: { onDone: () => void };
     defaultSearch: { onSave: (criteria: SearchCriteria) => void; isCityDataLoading: boolean; cityDataCache: Record<string, City[]> };
     defaultPredictedNews: { onSave: (criteria: PredictedCriteria) => void; title: string; description: string; };
     dataMigration: { onMigrate: () => void; onDiscard: () => void };
+    cepInput: { onSave: (cep: string) => void; isLoggedIn: boolean; };
 }
 
 interface ModalState {
@@ -53,26 +51,11 @@ interface ModalContextType extends ModalState {
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
 
 export const ModalManager: React.FC = () => {
-    const { modalType, modalProps, closeModal, openModal } = useModal();
-    const { setCidadeRota } = useUserData();
-    const { user } = useAuth();
+    const { modalType, modalProps, closeModal } = useModal();
 
     if (!modalType) {
         return null;
     }
-
-    const handleSaveCepAndOpenRoute = (cep: string) => {
-        setCidadeRota(cep);
-        if (modalProps.job) {
-            closeModal();
-            // Um pequeno atraso para permitir que o modal de CEP feche antes de abrir o próximo
-            setTimeout(() => {
-                openModal('routeMap', { job: modalProps.job, userCep: cep });
-            }, 250);
-        } else {
-            closeModal();
-        }
-    };
     
     // Uma função é necessária para satisfazer o `onClose` do tutorial, que também define uma chave no localStorage.
     const handleTutorialClose = () => {
@@ -93,8 +76,6 @@ export const ModalManager: React.FC = () => {
             return <DonationModal isOpen={true} onClose={closeModal} />;
         case 'changelog':
             return <ChangelogModal isOpen={true} onClose={closeModal} />;
-        case 'cepInput':
-            return <CepInputModal isOpen={true} onClose={closeModal} onSave={handleSaveCepAndOpenRoute} isLoggedIn={!!user} />;
         case 'tutorial':
             return <InteractiveTutorial isOpen={true} onClose={handleTutorialClose} />;
         case 'defaultSearch':
@@ -103,6 +84,8 @@ export const ModalManager: React.FC = () => {
             return <DefaultPredictedNewsModal isOpen={true} onClose={closeModal} {...modalProps} />;
         case 'dataMigration':
             return <DataMigrationModal isOpen={true} onClose={modalProps.onDiscard} {...modalProps} />;
+        case 'cepInput':
+            return <CepInputModal isOpen={true} onClose={closeModal} {...modalProps} />;
         default:
             return null;
     }

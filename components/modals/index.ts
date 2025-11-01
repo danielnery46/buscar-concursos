@@ -1,4 +1,3 @@
-export * from './CepInputModal';
 export * from './ChangelogModal';
 export * from './DataMigrationModal';
 export * from './DefaultPredictedNewsModal';
@@ -7,3 +6,4 @@ export * from './DonationModal';
 export * from './InteractiveTutorial';
 export * from './MapModals';
 export * from './WebContentModal';
+export * from './CepInputModal';

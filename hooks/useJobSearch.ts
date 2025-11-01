@@ -3,7 +3,7 @@ import { City, ProcessedJob, SearchCriteria, SummaryData } from '../types';
 import { useDebounce } from './useDebounce';
 // FIX: Import geo and text utilities from their dedicated modules and sortJobs from helpers.
 import { sortJobs } from '../utils/helpers';
-import { processJobData, haversineDistance } from '../utils/geo';
+import { processJobData, calculateDrivingDistances, haversineDistance } from '../utils/geo';
 import { normalizeText } from '../utils/text';
 import { systemDefaultValues } from '../constants';
 import { fetchJobs, fetchJobsSummary } from '../services/scrapingService';
@@ -29,34 +29,50 @@ export const useJobSearch = (
     defaultSearch: SearchCriteria | null,
     isUserDataLoaded: boolean,
     isCityDataLoading: boolean,
-    concursosPage: number,
-    processosPage: number,
     itemsPerPage: number,
-    isActive: boolean
+    isActive: boolean,
+    quickSearchTerm: string,
 ) => {
     const [criteria, setCriteria] = useState<SearchCriteria>(systemDefaultValues);
     const debouncedCriteria = useDebounce(criteria, 500);
     const [isLoading, setIsLoading] = useState(isActive);
     const [error, setError] = useState<string | null>(null);
 
+    const [concursosPage, setConcursosPage] = useState(1);
+    const [processosPage, setProcessosPage] = useState(1);
+
     const [concursos, setConcursos] = useState<ProcessedJob[]>([]);
     const [totalConcursos, setTotalConcursos] = useState(0);
     const [processosSeletivos, setProcessosSeletivos] = useState<ProcessedJob[]>([]);
     const [totalProcessos, setTotalProcessos] = useState(0);
     const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
-    const [isInitialized, setIsInitialized] = useState(false);
+    const [isReadyToFetch, setIsReadyToFetch] = useState(false);
 
-    // Efeito para inicializar os critérios apenas uma vez, quando os dados do usuário estiverem prontos.
+    // This effect resets the page numbers whenever the main search filters change,
+    // ensuring new searches always start from the first page.
+    useEffect(() => {
+        setConcursosPage(1);
+        setProcessosPage(1);
+    }, [debouncedCriteria, quickSearchTerm]);
+
     useEffect(() => {
         if (isUserDataLoaded) {
-            setCriteria({ ...systemDefaultValues, ...(defaultSearch || {}) });
-            setIsInitialized(true);
+            const initialCriteria = { ...systemDefaultValues, ...(defaultSearch || {}) };
+            setCriteria(initialCriteria);
+            
+            // Set a timer to align with the debounce period.
+            // This ensures the first fetch only happens after the initial criteria are debounced.
+            const timer = setTimeout(() => {
+                setIsReadyToFetch(true);
+            }, 500); // Must match useDebounce delay
+
+            return () => clearTimeout(timer);
         }
     }, [defaultSearch, isUserDataLoaded]);
     
     useEffect(() => {
         // Guarda de segurança para não executar a busca até que tudo esteja pronto.
-        if (!isActive || !isUserDataLoaded || isCityDataLoading || !isInitialized) {
+        if (!isActive || !isReadyToFetch || isCityDataLoading) {
             return;
         }
 
@@ -75,12 +91,11 @@ export const useJobSearch = (
                         setConcursos([]); setTotalConcursos(0);
                         setProcessosSeletivos([]); setTotalProcessos(0);
                         setSummaryData({ totalOpportunities: 0, totalVacancies: 0, highestSalary: 0 });
-                        setIsLoading(false);
+                        setIsLoading(false); // <-- CORREÇÃO: Movido para cá
                         return;
                     };
                     
-                    // fetchJobs now handles fetching all results internally for distance searches.
-                    const { jobs: allStateJobs } = await fetchJobs(debouncedCriteria, 1, 1, 'all', controller.signal);
+                    const { jobs: allStateJobs } = await fetchJobs(debouncedCriteria, 1, 1, 'all', quickSearchTerm, controller.signal);
 
                     const allCitiesMap = new Map<string, City>();
                     Object.entries(cityDataCache).forEach(([st, cities]) => {
@@ -90,10 +105,29 @@ export const useJobSearch = (
                     });
 
                     const jobsWithGeo = allStateJobs.map(job => processJobData(job, allCitiesMap));
-                    const jobsInRadius = jobsWithGeo.map(job => {
-                        const distance = (job.lat && job.lon) ? haversineDistance(selectedCityData.lat, selectedCityData.lon, job.lat, job.lon) : undefined;
-                        return { ...job, distance };
-                    }).filter(job => job.distance !== undefined && job.distance <= distanciaRaio);
+                    
+                    // ... (Etapas 1, 2, 3 de geolocalização) ...
+                    const haversineRadiusMultiplier = 1.5; 
+                    const jobsWithHaversineDistance = jobsWithGeo.map(job => {
+                        if (job.lat && job.lon) {
+                            return {
+                                ...job,
+                                distance: haversineDistance(selectedCityData.lat, selectedCityData.lon, job.lat, job.lon)
+                            };
+                        }
+                        return job;
+                    });
+                    
+                    const candidateJobs = jobsWithHaversineDistance.filter(job => 
+                        job.distance !== undefined && job.distance <= (distanciaRaio as number) * haversineRadiusMultiplier
+                    );
+
+                    const jobsWithDrivingDistance = await calculateDrivingDistances(
+                        { lat: selectedCityData.lat, lon: selectedCityData.lon },
+                        candidateJobs
+                    );
+                    
+                    const jobsInRadius = jobsWithDrivingDistance.filter(job => job.distance !== undefined && job.distance <= (distanciaRaio as number));
 
                     const sortedJobs = sortJobs(jobsInRadius, sort);
 
@@ -111,52 +145,52 @@ export const useJobSearch = (
                         return acc;
                     }, { totalVacancies: 0, highestSalary: 0 });
                     setSummaryData({ totalOpportunities: sortedJobs.length, ...summary });
+
+                    setIsLoading(false); // <-- CORREÇÃO: Movido para o fim do 'try'
                     
                 } else {
-                    // Decoupled fetching: Summary and job lists fetch in parallel.
-                    // A failure in summary won't block the job lists from rendering.
-                    const summaryPromise = fetchJobsSummary(debouncedCriteria, controller.signal)
+                    // Decoupled fetching...
+                    const summaryPromise = fetchJobsSummary(debouncedCriteria, quickSearchTerm, controller.signal)
                         .then(summary => setSummaryData(summary))
                         .catch(summaryError => {
                             if (summaryError.name !== 'AbortError') {
                                 console.error("Error fetching summary data:", summaryError);
-                                setSummaryData(null); // Clear summary on error but don't set a page-level error.
+                                setSummaryData(null);
                             }
                         });
 
                     const jobsPromise = Promise.all([
-                        fetchJobs(debouncedCriteria, concursosPage, itemsPerPage, 'concurso', controller.signal),
-                        fetchJobs(debouncedCriteria, processosPage, itemsPerPage, 'processo_seletivo', controller.signal),
+                        fetchJobs(debouncedCriteria, concursosPage, itemsPerPage, 'concurso', quickSearchTerm, controller.signal),
+                        fetchJobs(debouncedCriteria, processosPage, itemsPerPage, 'processo_seletivo', quickSearchTerm, controller.signal),
                     ]).then(([concursosResult, processosResult]) => {
                         setConcursos(concursosResult.jobs);
                         setTotalConcursos(concursosResult.count);
                         setProcessosSeletivos(processosResult.jobs);
                         setTotalProcessos(processosResult.count);
                     }).catch(jobError => {
-                        // Only set the main page error if fetching the job lists fails.
                         if (jobError.name !== 'AbortError') {
                             throw jobError;
                         }
                     });
 
                     await Promise.all([summaryPromise, jobsPromise]);
+                    setIsLoading(false); // <-- CORREÇÃO: Movido para o fim do 'try'
                 }
 
             } catch (err: any) {
-                if (err.name !== 'AbortError') {
+                // A lógica do 'catch' está correta (como fizemos da última vez)
+                if (!controller.signal.aborted) {
                     setError(err.message || "Ocorreu um erro desconhecido ao buscar as vagas.");
                     console.error("Error fetching job data:", err);
+                    setIsLoading(false); // <-- CORREÇÃO: Adicionado aqui também
                 }
-            } finally {
-                if (!controller.signal.aborted) {
-                    setIsLoading(false);
-                }
-            }
+            } 
+            // CORREÇÃO: Bloco 'finally' removido para evitar a condição de corrida.
         };
 
         fetchData();
         return () => { controller.abort(); };
-    }, [debouncedCriteria, concursosPage, processosPage, isActive]);
+    }, [debouncedCriteria, quickSearchTerm, concursosPage, processosPage, isActive, isCityDataLoading, itemsPerPage, isReadyToFetch]);
 
     return {
         criteria: criteria ?? systemDefaultValues,
@@ -169,5 +203,9 @@ export const useJobSearch = (
         summaryData,
         isLoading,
         error,
+        concursosPage,
+        setConcursosPage,
+        processosPage,
+        setProcessosPage,
     };
 };

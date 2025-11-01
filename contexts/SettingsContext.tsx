@@ -23,7 +23,7 @@ interface SettingsContextType {
   isSettingsLoaded: boolean;
 }
 
-const defaultSettings: AccessibilitySettings = { highContrast: false, largerText: false, reduceMotion: false, uiScale: 100, openLinksInModal: true, showQuickAccess: true, dyslexicFont: false, highlightLinks: false, textSpacing: false, grayscale: false };
+const defaultSettings: AccessibilitySettings = { highContrast: false, largerText: false, reduceMotion: false, uiScale: 100, openLinksInModal: true, showQuickAccess: true, dyslexicFont: false, highlightLinks: false, textSpacing: false, grayscale: false, viewMode: 'grid' };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
@@ -98,10 +98,11 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
             if (error && error.code !== 'PGRST116') console.error('Error fetching settings:', error);
             
             _setTheme((data?.theme as Theme) || 'auto');
-            setAccessibilitySettings((data?.accessibility_settings as unknown as AccessibilitySettings) ?? defaultSettings);
+            setAccessibilitySettings({ ...defaultSettings, ...(data?.accessibility_settings as unknown as Partial<AccessibilitySettings> ?? {})});
         } else {
             _setTheme(localStorage.getItem(THEME_KEY) as Theme || 'auto');
-            setAccessibilitySettings(JSON.parse(localStorage.getItem(ACCESSIBILITY_SETTINGS_KEY) || 'null') || defaultSettings);
+            const localSettings = JSON.parse(localStorage.getItem(ACCESSIBILITY_SETTINGS_KEY) || 'null');
+            setAccessibilitySettings({ ...defaultSettings, ...(localSettings || {}) });
         }
         setIsSettingsLoaded(true);
     };
@@ -135,7 +136,7 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
             setAccessibilitySettings(mergedSettings);
         } else { // discard
             _setTheme((cloudData?.theme as Theme) || 'auto');
-            setAccessibilitySettings((cloudData?.accessibility_settings as unknown as AccessibilitySettings) ?? defaultSettings);
+            setAccessibilitySettings({ ...defaultSettings, ...(cloudData?.accessibility_settings as unknown as Partial<AccessibilitySettings> ?? {})});
         }
         
         settingsKeys.forEach(key => localStorage.removeItem(key));
@@ -160,7 +161,7 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
         }
     };
     saveTheme();
-  }, [debouncedTheme]);
+  }, [debouncedTheme, user, isSettingsLoaded]);
   
   // Debounced save for Accessibility Settings, guarded by initialLoadDone flag.
   useEffect(() => {
@@ -174,7 +175,7 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children }) => {
         }
     };
     saveAccessibilitySettings();
-  }, [debouncedAccessibilitySettings]);
+  }, [debouncedAccessibilitySettings, user, isSettingsLoaded]);
 
   // Apply theme to DOM
   useEffect(() => {
