@@ -1,0 +1,18 @@
+
+[
+  { "name": "Amajari", "normalizedName": "amajari", "lat": 3.65, "lon": -61.41 },
+  { "name": "Alto Alegre", "normalizedName": "alto alegre", "lat": 2.98, "lon": -61.28 },
+  { "name": "Boa Vista", "normalizedName": "boa vista", "lat": 2.81, "lon": -60.67 },
+  { "name": "Bonfim", "normalizedName": "bonfim", "lat": 2.76, "lon": -59.83 },
+  { "name": "Cantá", "normalizedName": "canta", "lat": 2.61, "lon": -60.6 },
+  { "name": "Caracaraí", "normalizedName": "caracarai", "lat": 1.81, "lon": -61.12 },
+  { "name": "Caroebe", "normalizedName": "caroebe", "lat": 0.88, "lon": -59.69 },
+  { "name": "Iracema", "normalizedName": "iracema", "lat": 2.18, "lon": -61.02 },
+  { "name": "Mucajaí", "normalizedName": "mucajai", "lat": 2.43, "lon": -60.9 },
+  { "name": "Normandia", "normalizedName": "normandia", "lat": 3.88, "lon": -59.62 },
+  { "name": "Pacaraima", "normalizedName": "pacaraima", "lat": 4.48, "lon": -61.14 },
+  { "name": "Rorainópolis", "normalizedName": "rorainopolis", "lat": 0.95, "lon": -60.42 },
+  { "name": "São João da Baliza", "normalizedName": "sao joao da baliza", "lat": 0.95, "lon": -59.91 },
+  { "name": "São Luiz", "normalizedName": "sao luiz", "lat": 1.01, "lon": -60.16 },
+  { "name": "Uiramutã", "normalizedName": "uiramuta", "lat": 4.59, "lon": -60.16 }
+]

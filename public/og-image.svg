@@ -1,0 +1,23 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#030712"/>
+  <g transform="translate(400, 80) scale(4)">
+    <g id="documento">
+        <path d="M15 22 H 70 L 85 37 V 92 H 15 Z" fill="#000" opacity="0.08" transform="translate(2, 2)"/>
+        <path d="M15 20 H 70 L 85 35 V 90 H 15 Z" fill="#ffffff" stroke="#94a3b8" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M70 20 L 70 35 L 85 35 Z" fill="#f1f5f9" stroke="#94a3b8" stroke-width="3" stroke-linejoin="round"/>
+        <rect x="25" y="50" width="50" height="4" rx="2" fill="#cbd5e1" />
+        <rect x="25" y="62" width="50" height="4" rx="2" fill="#cbd5e1" />
+        <rect x="25" y="74" width="35" height="4" rx="2" fill="#cbd5e1" />
+    </g>
+    <g id="lupa">
+        <circle cx="58" cy="45" r="23" fill="#000" opacity="0.1" transform="translate(2, 2)" />
+        <path d="M75 62 L 93 80" stroke="#000" opacity="0.1" stroke-width="10" stroke-linecap="round" transform="translate(2, 2)" />
+        <circle cx="58" cy="45" r="23" fill="rgba(79, 70, 229, 0.2)" stroke="#4f46e5" stroke-width="6"/>
+        <path d="M75 62 L 93 80" stroke="#4f46e5" stroke-width="10" stroke-linecap="round" />
+    </g>
+  </g>
+  <text x="600" y="520" font-family="Arial, sans-serif" font-size="80" font-weight="bold" fill="#f8fafc" text-anchor="middle">
+    <tspan fill="#e2e8f0">Buscar</tspan>
+    <tspan fill="#818cf8"> Concursos</tspan>
+  </text>
+</svg>

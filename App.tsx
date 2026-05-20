@@ -1,0 +1,236 @@
+/*
+ * Copyright 2025 Daniel Nery Frangilo Paiva
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import React, { useState, useEffect, useRef, lazy, Suspense, useCallback } from 'react';
+import { ActiveTab, AuthView } from './types';
+import { TUTORIAL_KEY, COOKIE_CONSENT_KEY } from './constants';
+import { useAuth } from './contexts/AuthContext';
+import { useSettings } from './contexts/SettingsContext';
+import { useUserData } from './contexts/UserDataContext';
+import { useModal } from './contexts/ModalContext';
+import { useAppData } from './hooks/useAppData';
+import { InitialLoadErrorDisplay } from './components/StateDisplays';
+import { Header } from './components/Header';
+import { ConnectionErrorBanner } from './components/ConnectionErrorBanner';
+import { CookieConsentBanner } from './components/CookieConsentBanner';
+
+// Lazy-load all pages to enable code-splitting and reduce initial bundle size.
+const SearchPage = lazy(() => import('./components/SearchPage'));
+const PredictedJobsPage = lazy(() => import('./components/PredictedJobsPage'));
+const NewsPage = lazy(() => import('./components/NewsPage'));
+const SettingsPage = lazy(() => import('./components/SettingsPage'));
+const SupportPage = lazy(() => import('./components/SupportPage'));
+const RssPage = lazy(() => import('./components/RssPage'));
+const AuthPage = lazy(() => import('./components/AuthPage'));
+
+
+// --- Main App Component ---
+
+const App: React.FC = () => {
+    const { user, loading: authLoading } = useAuth();
+    const { isUserDataLoaded } = useUserData();
+    const { isSettingsLoaded } = useSettings();
+    const { openModal } = useModal();
+
+    const {
+        isInitialLoading: isAppInfraLoading,
+        initialLoadError: appInfraError,
+        cityDataCache,
+        loadCitiesForState,
+    } = useAppData();
+
+    const [activeTab, setActiveTab] = useState<ActiveTab>('search');
+    const [authView, setAuthView] = useState<AuthView>('login');
+    const [filterCounts, setFilterCounts] = useState<Record<string, number>>({
+        search: 0,
+        predicted: 0,
+        news: 0,
+    });
+    const [openFilterPanel, setOpenFilterPanel] = useState<ActiveTab | null>(null);
+    const [showConnectionError, setShowConnectionError] = useState(false);
+    const [isInitialAppLoad, setIsInitialAppLoad] = useState(true);
+    const [showCookieConsent, setShowCookieConsent] = useState(false);
+
+    const mainContentRef = useRef<HTMLDivElement>(null);
+
+    // Memoize callbacks
+    const setIsSearchFiltersOpen = useCallback((isOpen: boolean) => setOpenFilterPanel(isOpen ? 'search' : null), []);
+    const setIsPredictedFiltersOpen = useCallback((isOpen: boolean) => setOpenFilterPanel(isOpen ? 'predicted' : null), []);
+    const setIsNewsFiltersOpen = useCallback((isOpen: boolean) => setOpenFilterPanel(isOpen ? 'news' : null), []);
+
+    const handleFilterSetOpen = useCallback((isOpen: boolean) => {
+        if (activeTab === 'search') setIsSearchFiltersOpen(isOpen);
+        if (activeTab === 'predicted') setIsPredictedFiltersOpen(isOpen);
+        if (activeTab === 'news') setIsNewsFiltersOpen(isOpen);
+    }, [activeTab, setIsSearchFiltersOpen, setIsPredictedFiltersOpen, setIsNewsFiltersOpen]);
+
+    const handleSearchFilterCountChange = useCallback((count: number) => setFilterCounts(p => ({ ...p, search: count })), []);
+    const handlePredictedFilterCountChange = useCallback((count: number) => setFilterCounts(p => ({ ...p, predicted: count })), []);
+    const handleNewsFilterCountChange = useCallback((count: number) => setFilterCounts(p => ({ ...p, news: count })), []);
+
+        // ... (useEffects) ...
+        useEffect(() => {
+            const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Control') document.body.classList.add('ctrl-pressed'); };
+            const handleKeyUp = (e: KeyboardEvent) => { if (e.key === 'Control') document.body.classList.remove('ctrl-pressed'); };
+            const handleBlur = () => document.body.classList.remove('ctrl-pressed');
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            window.addEventListener('blur', handleBlur);
+            return () => {
+                window.removeEventListener('keydown', handleKeyDown);
+                window.removeEventListener('keyup', handleKeyUp);
+                window.removeEventListener('blur', handleBlur);
+            };
+        }, []);
+
+        useEffect(() => {
+            if (!authLoading && isUserDataLoaded && isInitialAppLoad) {
+                setActiveTab('search');
+                setIsInitialAppLoad(false);
+            }
+        }, [authLoading, isUserDataLoaded, isInitialAppLoad]);
+
+        useEffect(() => { if (user && activeTab === 'auth' && (authView === 'login' || authView === 'signup')) setActiveTab('search'); }, [user, activeTab, authView]);
+
+        useEffect(() => {
+            mainContentRef.current?.scrollTo(0, 0);
+        }, [activeTab]);
+
+        useEffect(() => {
+            const tutorialCompleted = localStorage.getItem(TUTORIAL_KEY);
+            const cookieConsent = localStorage.getItem(COOKIE_CONSENT_KEY);
+
+            if (!cookieConsent) {
+                setShowCookieConsent(true);
+            }
+
+            if (!isAppInfraLoading && !tutorialCompleted) {
+                openModal('tutorial', { onDone: () => localStorage.setItem(TUTORIAL_KEY, 'true') });
+            }
+        }, [isAppInfraLoading, openModal]);
+
+        const handleAcceptCookies = () => {
+            localStorage.setItem(COOKIE_CONSENT_KEY, 'true');
+            setShowCookieConsent(false);
+        };
+
+        useEffect(() => {
+            const handleNetworkError = () => {
+                setShowConnectionError(true);
+            };
+            window.addEventListener('networkError', handleNetworkError);
+            return () => {
+                window.removeEventListener('networkError', handleNetworkError);
+            };
+        }, []);
+
+        const filterableTabs: ActiveTab[] = ['search', 'predicted', 'news'];
+        const filterConfig = filterableTabs.includes(activeTab)
+        ? {
+            setOpen: handleFilterSetOpen,
+            count: filterCounts[activeTab] ?? 0,
+        }
+        : undefined;
+
+        const isAppLoading = authLoading || !isUserDataLoaded || !isSettingsLoaded;
+
+        const baseMainClass = "flex flex-col px-4 sm:px-6 lg:px-8 pt-6";
+        // Search/Predicted/News need flex-1 to fill the viewport for their internal layout.
+        // Content-only pages (settings, support, rss, auth) must NOT have flex-1, otherwise
+        // the <main> element grows to viewport height and the empty space below the content
+        // becomes scrollable, causing a large blank area at the bottom.
+        const fullHeightTabs: ActiveTab[] = ['search', 'predicted', 'news'];
+        const mainClassName = `${baseMainClass}${fullHeightTabs.includes(activeTab) ? ' flex-1' : ''}`;
+
+
+        return (
+            <div className="flex flex-col h-dvh overflow-hidden bg-slate-100 dark:bg-black text-gray-800 dark:text-gray-200">
+            <Header
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            filterConfig={filterConfig}
+            />
+            <div ref={mainContentRef} className="flex-1 overflow-y-auto flex flex-col pt-16 sm:pt-20">
+            {isAppLoading ? (
+                <div className="flex-grow flex items-center justify-center">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-500"></div>
+                </div>
+            ) : (
+                <>
+                <main className={mainClassName}>
+                {appInfraError ? (
+                    <InitialLoadErrorDisplay title="Erro de Infraestrutura" message="Não foi possível carregar dados essenciais da aplicação, como a lista de cidades. A busca por distância pode não funcionar." />
+                ) : (
+                    <Suspense fallback={<div className="flex-grow flex items-center justify-center"><div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-500"></div></div>}>
+                    
+                    <div className={activeTab === 'search' ? 'flex flex-col flex-1' : 'hidden'}>
+                    <SearchPage
+                    isActive={activeTab === 'search'}
+                    mainContentRef={mainContentRef}
+                    isFiltersOpen={openFilterPanel === 'search'}
+                    setIsFiltersOpen={setIsSearchFiltersOpen}
+                    onFilterCountChange={handleSearchFilterCountChange}
+                    cityDataCache={cityDataCache}
+                    loadCitiesForState={loadCitiesForState}
+                    />
+                    </div>
+
+                    <div className={activeTab === 'predicted' ? 'flex flex-col flex-1' : 'hidden'}>
+                    <PredictedJobsPage
+                    isActive={activeTab === 'predicted'}
+                    mainContentRef={mainContentRef}
+                    isFiltersOpen={openFilterPanel === 'predicted'}
+                    setIsFiltersOpen={setIsPredictedFiltersOpen}
+                    onFilterCountChange={handlePredictedFilterCountChange}
+                    />
+                    </div>
+
+                    <div className={activeTab === 'news' ? 'flex flex-col flex-1' : 'hidden'}>
+                    <NewsPage
+                    isActive={activeTab === 'news'}
+                    mainContentRef={mainContentRef}
+                    isFiltersOpen={openFilterPanel === 'news'}
+                    setIsFiltersOpen={setIsNewsFiltersOpen}
+                    onFilterCountChange={handleNewsFilterCountChange}
+                    />
+                    </div>
+
+                    <div className={activeTab === 'settings' ? 'flex flex-col' : 'hidden'}>
+                    <SettingsPage setActiveTab={setActiveTab} />
+                    </div>
+                    <div className={activeTab === 'support' ? 'flex flex-col' : 'hidden'}>
+                    <SupportPage />
+                    </div>
+                    <div className={activeTab === 'rss' ? 'flex flex-col' : 'hidden'}>
+                    <RssPage cityDataCache={cityDataCache} loadCitiesForState={loadCitiesForState} />
+                    </div>
+                    <div className={activeTab === 'auth' ? 'flex flex-col' : 'hidden'}>
+                    <AuthPage view={authView} onViewChange={setAuthView} initialEmail={user?.email} />
+                    </div>
+                    </Suspense>
+                )}
+                </main>
+
+                </>
+            )}
+            </div>
+            <CookieConsentBanner isVisible={showCookieConsent} onAccept={handleAcceptCookies} />
+            <ConnectionErrorBanner isVisible={showConnectionError} onDismiss={() => setShowConnectionError(false)} />
+            </div>
+        );
+};
+
+export default App;

@@ -1,0 +1,341 @@
+import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, FC, useRef } from 'react';
+import type { SearchCriteria, PredictedCriteria, User, AccessibilitySettings, Json } from '../types';
+import { useAuth } from './AuthContext';
+import { supabase } from '../utils/supabase';
+import {
+    ROTA_CIDADE_KEY, FAVORITE_SEARCHES_KEY, FAVORITE_PREDICTED_FILTERS_KEY, FAVORITE_NEWS_FILTERS_KEY,
+    DEFAULT_SEARCH_KEY, DEFAULT_PREDICTED_FILTER_KEY, DEFAULT_NEWS_FILTER_KEY, ACCESSIBILITY_SETTINGS_KEY, THEME_KEY
+} from '../constants';
+import { useDebounce } from '../hooks/useDebounce';
+import { useModal } from './ModalContext';
+import { setUserDataCache, clearUserDataCache } from '../utils/userDataFetchCache';
+
+interface UserDataContextType {
+    cidadeRota: string;
+    setCidadeRota: React.Dispatch<React.SetStateAction<string>>;
+    favoriteSearches: SearchCriteria[];
+    setFavoriteSearches: React.Dispatch<React.SetStateAction<SearchCriteria[]>>;
+    favoritePredictedFilters: PredictedCriteria[];
+    setFavoritePredictedFilters: React.Dispatch<React.SetStateAction<PredictedCriteria[]>>;
+    favoriteNewsFilters: PredictedCriteria[];
+    setFavoriteNewsFilters: React.Dispatch<React.SetStateAction<PredictedCriteria[]>>;
+    defaultSearch: SearchCriteria | null;
+    setDefaultSearch: React.Dispatch<React.SetStateAction<SearchCriteria | null>>;
+    defaultPredictedFilter: PredictedCriteria | null;
+    setDefaultPredictedFilter: React.Dispatch<React.SetStateAction<PredictedCriteria | null>>;
+    defaultNewsFilter: PredictedCriteria | null;
+    setDefaultNewsFilter: React.Dispatch<React.SetStateAction<PredictedCriteria | null>>;
+    isUserDataLoaded: boolean;
+    exportUserData: () => void;
+    importUserData: (file: File) => Promise<AccessibilitySettings | undefined>;
+    clearAllLocalData: () => void;
+}
+
+const UserDataContext = createContext<UserDataContextType | undefined>(undefined);
+
+const getLocalItem = (key: string, defaultValue: any) => {
+    try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : defaultValue;
+    } catch { return defaultValue; }
+};
+
+// FIX: Added the missing `viewMode` property to align with the `AccessibilitySettings` type.
+const defaultAccessibilitySettings: AccessibilitySettings = { highContrast: false, largerText: false, reduceMotion: false, uiScale: 100, openLinksInModal: true, showQuickAccess: true, dyslexicFont: false, highlightLinks: false, textSpacing: false, grayscale: false, viewMode: 'grid' };
+
+// This maps the localStorage keys to the database column names.
+const keyToColumnMap: { [key: string]: string } = {
+    [ROTA_CIDADE_KEY]: 'rota_cidade',
+    [FAVORITE_SEARCHES_KEY]: 'favorite_searches',
+    [FAVORITE_PREDICTED_FILTERS_KEY]: 'favorite_predicted_filters',
+    [FAVORITE_NEWS_FILTERS_KEY]: 'favorite_news_filters',
+    [DEFAULT_SEARCH_KEY]: 'default_search',
+    [DEFAULT_PREDICTED_FILTER_KEY]: 'default_predicted_filter',
+    [DEFAULT_NEWS_FILTER_KEY]: 'default_news_filter',
+};
+
+const usePersistentState = <T,>(value: T, user: User | null, isLoaded: boolean, key: string) => {
+    const debouncedValue = useDebounce(value, 1500);
+    const initialLoadDone = useRef(false);
+    const lastUserId = useRef(user?.id);
+
+    // Effect to manage the initial load state.
+    useEffect(() => {
+        // If user changes (login/logout), reset the load flag to wait for new data.
+        if (user?.id !== lastUserId.current) {
+            initialLoadDone.current = false;
+            lastUserId.current = user?.id;
+        }
+
+        // Once `isLoaded` becomes true for the current user/session, mark initial load as done.
+        // This ensures we don't save anything until the first data load is complete.
+        if (isLoaded && !initialLoadDone.current) {
+            initialLoadDone.current = true;
+        }
+    }, [user, isLoaded]);
+
+    // Effect to save the debounced value.
+    useEffect(() => {
+        // The crucial guard: DO NOT save if the initial data load for the current session is not complete.
+        // This prevents saving the default/stale state during the login transition.
+        if (!initialLoadDone.current) {
+            return;
+        }
+
+        const saveState = async () => {
+            if (user) {
+                const columnName = keyToColumnMap[key];
+                if (!columnName) return;
+                const { error } = await supabase.from('user_data').upsert({ id: user.id, [columnName]: debouncedValue as unknown as Json });
+                if (error) console.error(`Error saving ${key}:`, error);
+            } else {
+                try {
+                    localStorage.setItem(key, JSON.stringify(debouncedValue));
+                } catch (e) {
+                    console.error(`Error saving ${key} to localStorage:`, e);
+                }
+            }
+        };
+
+        saveState();
+    }, [debouncedValue, key]);
+};
+
+
+interface UserDataProviderProps {
+  children: ReactNode;
+}
+
+export const UserDataProvider: FC<UserDataProviderProps> = ({ children }) => {
+    const { user, loading: authLoading } = useAuth();
+    const { openModal, closeModal } = useModal();
+    const [isUserDataLoaded, setIsUserDataLoaded] = useState(false);
+    const prevUserRef = useRef<User | null>(null);
+    const initialLoadCompleted = useRef(false);
+
+    const [cidadeRota, setCidadeRota] = useState<string>('');
+    const [favoriteSearches, setFavoriteSearches] = useState<SearchCriteria[]>([]);
+    const [favoritePredictedFilters, setFavoritePredictedFilters] = useState<PredictedCriteria[]>([]);
+    const [favoriteNewsFilters, setFavoriteNewsFilters] = useState<PredictedCriteria[]>([]);
+    const [defaultSearch, setDefaultSearch] = useState<SearchCriteria | null>(null);
+    const [defaultPredictedFilter, setDefaultPredictedFilter] = useState<PredictedCriteria | null>(null);
+    const [defaultNewsFilter, setDefaultNewsFilter] = useState<PredictedCriteria | null>(null);
+
+    const userDataKeys = [ROTA_CIDADE_KEY, FAVORITE_SEARCHES_KEY, FAVORITE_PREDICTED_FILTERS_KEY, FAVORITE_NEWS_FILTERS_KEY, DEFAULT_SEARCH_KEY, DEFAULT_PREDICTED_FILTER_KEY, DEFAULT_NEWS_FILTER_KEY];
+    
+    useEffect(() => {
+        const loadUserData = async () => {
+            const isLoggingIn = user && !prevUserRef.current;
+            
+            const hasNonDefaultLocalData = () => {
+                const isDifferent = (key: string, defaultValue: any) => {
+                    const item = localStorage.getItem(key);
+                    if (item === null) return false;
+                    try {
+                        const localValue = JSON.parse(item);
+                        return JSON.stringify(localValue) !== JSON.stringify(defaultValue);
+                    } catch (e) {
+                        if (key === THEME_KEY) return item !== defaultValue;
+                        return true;
+                    }
+                };
+            
+                if (isDifferent(ROTA_CIDADE_KEY, '')) return true;
+                if (isDifferent(FAVORITE_SEARCHES_KEY, [])) return true;
+                if (isDifferent(FAVORITE_PREDICTED_FILTERS_KEY, [])) return true;
+                if (isDifferent(FAVORITE_NEWS_FILTERS_KEY, [])) return true;
+                if (isDifferent(DEFAULT_SEARCH_KEY, null)) return true;
+                if (isDifferent(DEFAULT_PREDICTED_FILTER_KEY, null)) return true;
+                if (isDifferent(DEFAULT_NEWS_FILTER_KEY, null)) return true;
+                if (isDifferent(THEME_KEY, 'auto')) return true;
+                if (isDifferent(ACCESSIBILITY_SETTINGS_KEY, defaultAccessibilitySettings)) return true;
+            
+                return false;
+            };
+
+            const localDataIsModified = hasNonDefaultLocalData();
+
+            if (isLoggingIn && localDataIsModified) {
+                const { data: cloudData } = await supabase.from('user_data').select('*').eq('id', user.id).single();
+                // Cache the fetched row so SettingsContext can reuse it without a second query
+                if (cloudData) setUserDataCache(user.id, cloudData as Record<string, unknown>);
+
+                const handleMigrate = () => {
+                    const mergeData = <T,>(cloudData: T, localKey: string, defaultValue: T): T => {
+                        const isCloudDataEmpty = !cloudData || (Array.isArray(cloudData) && cloudData.length === 0);
+                        if (isCloudDataEmpty) {
+                            const localData = getLocalItem(localKey, defaultValue);
+                            const isLocalDataPresent = localData && (!Array.isArray(localData) || localData.length > 0);
+                            if (isLocalDataPresent) return localData;
+                        }
+                        return cloudData || defaultValue;
+                    };
+                    
+                    setCidadeRota(mergeData(cloudData?.rota_cidade, ROTA_CIDADE_KEY, '') ?? '');
+                    setFavoriteSearches(mergeData(cloudData?.favorite_searches, FAVORITE_SEARCHES_KEY, []) as unknown as SearchCriteria[] ?? []);
+                    setFavoritePredictedFilters(mergeData(cloudData?.favorite_predicted_filters, FAVORITE_PREDICTED_FILTERS_KEY, []) as unknown as PredictedCriteria[] ?? []);
+                    setFavoriteNewsFilters(mergeData(cloudData?.favorite_news_filters, FAVORITE_NEWS_FILTERS_KEY, []) as unknown as PredictedCriteria[] ?? []);
+                    setDefaultSearch(mergeData(cloudData?.default_search, DEFAULT_SEARCH_KEY, null) as unknown as SearchCriteria | null ?? null);
+                    setDefaultPredictedFilter(mergeData(cloudData?.default_predicted_filter, DEFAULT_PREDICTED_FILTER_KEY, null) as unknown as PredictedCriteria | null ?? null);
+                    setDefaultNewsFilter(mergeData(cloudData?.default_news_filter, DEFAULT_NEWS_FILTER_KEY, null) as unknown as PredictedCriteria | null ?? null);
+                    
+                    window.dispatchEvent(new CustomEvent('migrationDecision', { detail: { action: 'migrate' } }));
+                    userDataKeys.forEach(key => localStorage.removeItem(key));
+                    setIsUserDataLoaded(true);
+                    closeModal();
+                };
+
+                const handleDiscard = () => {
+                    setCidadeRota(cloudData?.rota_cidade ?? '');
+                    setFavoriteSearches(cloudData?.favorite_searches as unknown as SearchCriteria[] ?? []);
+                    setFavoritePredictedFilters(cloudData?.favorite_predicted_filters as unknown as PredictedCriteria[] ?? []);
+                    setFavoriteNewsFilters(cloudData?.favorite_news_filters as unknown as PredictedCriteria[] ?? []);
+                    setDefaultSearch(cloudData?.default_search as unknown as SearchCriteria | null ?? null);
+                    setDefaultPredictedFilter(cloudData?.default_predicted_filter as unknown as PredictedCriteria | null ?? null);
+                    setDefaultNewsFilter(cloudData?.default_news_filter as unknown as PredictedCriteria | null ?? null);
+                    
+                    window.dispatchEvent(new CustomEvent('migrationDecision', { detail: { action: 'discard' } }));
+                    userDataKeys.forEach(key => localStorage.removeItem(key));
+                    setIsUserDataLoaded(true);
+                    closeModal();
+                };
+
+                openModal('dataMigration', { onMigrate: handleMigrate, onDiscard: handleDiscard });
+            } else if (user) {
+                const { data, error } = await supabase.from('user_data').select('*').eq('id', user.id).single();
+                if (error && error.code !== 'PGRST116') console.error('Error fetching user data:', error);
+                // Cache the fetched row so SettingsContext can reuse it without a second query
+                setUserDataCache(user.id, data as Record<string, unknown> ?? null);
+                
+                setCidadeRota(data?.rota_cidade ?? '');
+                setFavoriteSearches(data?.favorite_searches as unknown as SearchCriteria[] ?? []);
+                setFavoritePredictedFilters(data?.favorite_predicted_filters as unknown as PredictedCriteria[] ?? []);
+                setFavoriteNewsFilters(data?.favorite_news_filters as unknown as PredictedCriteria[] ?? []);
+                setDefaultSearch(data?.default_search as unknown as SearchCriteria | null ?? null);
+                setDefaultPredictedFilter(data?.default_predicted_filter as unknown as PredictedCriteria | null ?? null);
+                setDefaultNewsFilter(data?.default_news_filter as unknown as PredictedCriteria | null ?? null);
+                setIsUserDataLoaded(true);
+            } else {
+                // User logged out — evict the shared DB row cache
+                clearUserDataCache();
+                setCidadeRota(getLocalItem(ROTA_CIDADE_KEY, ''));
+                setFavoriteSearches(getLocalItem(FAVORITE_SEARCHES_KEY, []));
+                setFavoritePredictedFilters(getLocalItem(FAVORITE_PREDICTED_FILTERS_KEY, []));
+                setFavoriteNewsFilters(getLocalItem(FAVORITE_NEWS_FILTERS_KEY, []));
+                setDefaultSearch(getLocalItem(DEFAULT_SEARCH_KEY, null));
+                setDefaultPredictedFilter(getLocalItem(DEFAULT_PREDICTED_FILTER_KEY, null));
+                setDefaultNewsFilter(getLocalItem(DEFAULT_NEWS_FILTER_KEY, null));
+                setIsUserDataLoaded(true);
+            }
+        };
+
+        if (authLoading) {
+            return;
+        }
+        
+        if (initialLoadCompleted.current && user?.id === prevUserRef.current?.id) {
+            return;
+        }
+        
+        setIsUserDataLoaded(false);
+        loadUserData().then(() => {
+            initialLoadCompleted.current = true;
+        });
+        
+        prevUserRef.current = user;
+
+    }, [user, authLoading, openModal, closeModal]);
+    
+    // Hooks de persistência
+    usePersistentState(cidadeRota, user, isUserDataLoaded, ROTA_CIDADE_KEY);
+    usePersistentState(favoriteSearches, user, isUserDataLoaded, FAVORITE_SEARCHES_KEY);
+    usePersistentState(favoritePredictedFilters, user, isUserDataLoaded, FAVORITE_PREDICTED_FILTERS_KEY);
+    usePersistentState(favoriteNewsFilters, user, isUserDataLoaded, FAVORITE_NEWS_FILTERS_KEY);
+    usePersistentState(defaultSearch, user, isUserDataLoaded, DEFAULT_SEARCH_KEY);
+    usePersistentState(defaultPredictedFilter, user, isUserDataLoaded, DEFAULT_PREDICTED_FILTER_KEY);
+    usePersistentState(defaultNewsFilter, user, isUserDataLoaded, DEFAULT_NEWS_FILTER_KEY);
+
+    const exportUserData = useCallback(() => {
+        const accessibilitySettings = getLocalItem(ACCESSIBILITY_SETTINGS_KEY, {});
+        const dataStr = JSON.stringify({
+            version: "2.0.0",
+            timestamp: new Date().toISOString(),
+            data: {
+                [FAVORITE_SEARCHES_KEY]: favoriteSearches,
+                [FAVORITE_PREDICTED_FILTERS_KEY]: favoritePredictedFilters,
+                [FAVORITE_NEWS_FILTERS_KEY]: favoriteNewsFilters,
+                [DEFAULT_SEARCH_KEY]: defaultSearch,
+                [DEFAULT_PREDICTED_FILTER_KEY]: defaultPredictedFilter,
+                [DEFAULT_NEWS_FILTER_KEY]: defaultNewsFilter,
+                [ROTA_CIDADE_KEY]: cidadeRota,
+                [ACCESSIBILITY_SETTINGS_KEY]: accessibilitySettings,
+            }
+        }, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `buscar-concursos-backup-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }, [favoriteSearches, favoritePredictedFilters, favoriteNewsFilters, defaultSearch, defaultPredictedFilter, defaultNewsFilter, cidadeRota]);
+
+    const importUserData = useCallback((file: File): Promise<AccessibilitySettings | undefined> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const parsedData = JSON.parse(e.target?.result as string);
+                    if (!parsedData.data || !parsedData.version) throw new Error("Arquivo de backup inválido.");
+                    
+                    const { data } = parsedData;
+                    if (data[FAVORITE_SEARCHES_KEY] !== undefined) setFavoriteSearches(data[FAVORITE_SEARCHES_KEY] || []);
+                    if (data[FAVORITE_PREDICTED_FILTERS_KEY] !== undefined) setFavoritePredictedFilters(data[FAVORITE_PREDICTED_FILTERS_KEY] || []);
+                    if (data[FAVORITE_NEWS_FILTERS_KEY] !== undefined) setFavoriteNewsFilters(data[FAVORITE_NEWS_FILTERS_KEY] || []);
+                    if (data[DEFAULT_SEARCH_KEY] !== undefined) setDefaultSearch(data[DEFAULT_SEARCH_KEY] || null);
+                    if (data[DEFAULT_PREDICTED_FILTER_KEY] !== undefined) setDefaultPredictedFilter(data[DEFAULT_PREDICTED_FILTER_KEY] || null);
+                    if (data[DEFAULT_NEWS_FILTER_KEY] !== undefined) setDefaultNewsFilter(data[DEFAULT_NEWS_FILTER_KEY] || null);
+                    if (data[ROTA_CIDADE_KEY] !== undefined) setCidadeRota(data[ROTA_CIDADE_KEY] || '');
+                    
+                    const accessibilitySettings = data[ACCESSIBILITY_SETTINGS_KEY];
+                    resolve(accessibilitySettings);
+                } catch (error) {
+                    reject(new Error("Falha ao processar o arquivo. Verifique se é um backup válido."));
+                }
+            };
+            reader.onerror = () => reject(new Error("Falha ao ler o arquivo."));
+            reader.readAsText(file);
+        });
+    }, [setFavoriteSearches, setFavoritePredictedFilters, setFavoriteNewsFilters, setDefaultSearch, setDefaultPredictedFilter, setDefaultNewsFilter, setCidadeRota]);
+
+    const clearAllLocalData = useCallback(() => {
+        localStorage.clear();
+        window.location.reload();
+    }, []);
+
+    const value = {
+        cidadeRota, setCidadeRota,
+        favoriteSearches, setFavoriteSearches,
+        favoritePredictedFilters, setFavoritePredictedFilters,
+        favoriteNewsFilters, setFavoriteNewsFilters,
+        defaultSearch, setDefaultSearch,
+        defaultPredictedFilter, setDefaultPredictedFilter,
+        defaultNewsFilter, setDefaultNewsFilter,
+        isUserDataLoaded,
+        exportUserData,
+        importUserData,
+        clearAllLocalData
+    };
+
+    return <UserDataContext.Provider value={value}>{children}</UserDataContext.Provider>;
+};
+
+export const useUserData = () => {
+    const context = useContext(UserDataContext);
+    if (context === undefined) {
+        throw new Error('useUserData must be used within a UserDataProvider');
+    }
+    return context;
+};

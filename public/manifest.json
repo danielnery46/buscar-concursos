@@ -1,0 +1,16 @@
+{
+  "name": "Buscar Concursos",
+  "short_name": "BuscarConcursos",
+  "description": "Encontre milhares de vagas em concursos públicos e processos seletivos abertos em todo o Brasil. Filtre por estado, cidade, salário, escolaridade e mais.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
