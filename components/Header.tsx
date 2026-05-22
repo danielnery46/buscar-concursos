@@ -86,7 +86,7 @@ const HeaderMenu: React.FC<HeaderMenuProps> = memo(({ activeTab, setActiveTab })
                         <span>Apoie o projeto</span>
                     </button>
                     <a
-                        href="https://estudos.buscarconcursos.com.br"
+                        href="https://bcestudos.com.br"
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={() => setIsOpen(false)}

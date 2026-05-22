@@ -1,6 +1,6 @@
 import React, { useState, useEffect, memo } from 'react';
 import { supabase } from '../utils/supabase';
-import { AlertTriangleIcon, AtSignIcon, UserIcon, KeyIcon, GitHubIcon, GoogleIcon, FacebookIcon, DiscordIcon, CheckIcon } from './Icons';
+import { AlertTriangleIcon, AtSignIcon, UserIcon, KeyIcon, GitHubIcon, GoogleIcon, DiscordIcon, CheckIcon } from './Icons';
 import type { AuthApiError, Provider } from '@supabase/supabase-js';
 import type { AuthView } from '../types';
 import { Button } from './ui/Button';
@@ -55,7 +55,6 @@ const FormStatus: React.FC<{ type: 'success' | 'error'; message: React.ReactNode
 const oauthProviders = [
     { provider: 'google' as const, label: 'Google', icon: <GoogleIcon className="h-6 w-6" />, colorClass: '' },
     { provider: 'github' as const, label: 'GitHub', icon: <GitHubIcon className="h-6 w-6" />, colorClass: '' },
-    { provider: 'facebook' as const, label: 'Facebook', icon: <FacebookIcon className="h-6 w-6" />, colorClass: 'text-blue-600' },
     { provider: 'discord' as const, label: 'Discord', icon: <DiscordIcon className="h-7 w-7" />, colorClass: 'text-[#5865F2]' },
 ];
 
