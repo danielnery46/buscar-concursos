@@ -19,6 +19,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { UserDataProvider } from './contexts/UserDataContext';
+import { JobInterestsProvider } from './contexts/JobInterestsContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { ModalManager, ModalProvider } from './contexts/ModalContext';
 
@@ -33,10 +34,12 @@ root.render(
     <AuthProvider>
       <ModalProvider>
         <UserDataProvider>
-          <SettingsProvider>
-            <App />
-            <ModalManager />
-          </SettingsProvider>
+          <JobInterestsProvider>
+            <SettingsProvider>
+              <App />
+              <ModalManager />
+            </SettingsProvider>
+          </JobInterestsProvider>
         </UserDataProvider>
       </ModalProvider>
     </AuthProvider>

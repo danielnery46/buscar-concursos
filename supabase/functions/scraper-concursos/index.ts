@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2025 Daniel Nery Frangilo Paiva
  *
@@ -18,15 +19,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { DOMParser, Element } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import type { Database } from "../database.types.ts";
+import { z } from "https://esm.sh/zod@3.22.4";
+import type { Database } from "./database.types.ts";
+import { normalizeText } from "./text_utils.ts";
+import { 
+    log, 
+    getErrorMessage, 
+    createErrorResponse, 
+    createSuccessResponse, 
+    handleCors, 
+    retryAsync 
+} from "./utils.ts";
+import { ESTADOS_POR_REGIAO, CORS_HEADERS } from "./constants.ts";
 
 // Declara Deno para resolver erros de TypeScript em ambientes não-Deno.
 declare const Deno: any;
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type"
-};
 const BASE_CONCURSOS_URL = 'https://www.pciconcursos.com.br/concursos/';
 const REGIONS = [
   'nacional',
@@ -40,60 +48,39 @@ const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 2000;
 const MINIMUM_JOBS_THRESHOLD = 500; // Limite de segurança
 
-const ESTADOS_POR_REGIAO = {
-    'Sudeste': [
-      { sigla: 'ES', nome: 'Espírito Santo' }, { sigla: 'MG', nome: 'Minas Gerais' },
-      { sigla: 'RJ', nome: 'Rio de Janeiro' }, { sigla: 'SP', nome: 'São Paulo' },
-    ],
-    'Sul': [
-      { sigla: 'PR', nome: 'Paraná' }, { sigla: 'RS', nome: 'Rio Grande do Sul' }, { sigla: 'SC', nome: 'Santa Catarina' },
-    ],
-    'Centro-Oeste': [
-      { sigla: 'DF', nome: 'Distrito Federal' }, { sigla: 'GO', nome: 'Goiás' },
-      { sigla: 'MT', nome: 'Mato Grosso' }, { sigla: 'MS', nome: 'Mato Grosso do Sul' },
-    ],
-    'Nordeste': [
-      { sigla: 'AL', nome: 'Alagoas' }, { sigla: 'BA', nome: 'Bahia' }, { sigla: 'CE', nome: 'Ceará' },
-      { sigla: 'MA', nome: 'Maranhão' }, { sigla: 'PB', nome: 'Paraíba' }, { sigla: 'PE', nome: 'Pernambuco' },
-      { sigla: 'PI', nome: 'Piauí' }, { sigla: 'RN', nome: 'Rio Grande do Norte' }, { sigla: 'SE', nome: 'Sergipe' },
-    ],
-    'Norte': [
-      { sigla: 'AC', nome: 'Acre' }, { sigla: 'AP', nome: 'Amapá' }, { sigla: 'AM', nome: 'Amazonas' },
-      { sigla: 'PA', nome: 'Pará' }, { sigla: 'RO', nome: 'Rondônia' }, { sigla: 'RR', nome: 'Roraima' }, { sigla: 'TO', nome: 'Tocantins' },
-    ],
-};
 const allStates = Object.values(ESTADOS_POR_REGIAO).flat();
 const EDUCATION_LEVELS = ['Fundamental', 'Médio', 'Técnico', 'Superior'];
 
-// --- Funções Auxiliares ---
-const normalizeText = (text: string | null | undefined): string =>
-    text ? text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() : "";
+// --- Validation Schemas ---
 
-function getErrorMessage(error: any): string {
-    if (error instanceof Error) return error.message;
-    if (typeof error === 'object' && error !== null) {
-        return JSON.stringify(error);
-    }
-    return String(error);
-}
-
-async function retryAsync(operation: () => Promise<any>, maxRetries: number, delayMs: number) {
-  let lastError: Error | null = null;
-  for(let attempt = 1; attempt <= maxRetries; attempt++){
-    try {
-      return await operation();
-    } catch (error) {
-      lastError = error;
-      console.warn(`Attempt ${attempt} failed: ${getErrorMessage(error)}`);
-      if (attempt < maxRetries) {
-        const delay = delayMs * Math.pow(2, attempt - 1);
-        console.log(`Waiting ${delay / 1000}s before retrying...`);
-        await new Promise((resolve)=>setTimeout(resolve, delay));
-      }
-    }
-  }
-  throw new Error(`Operation failed after ${maxRetries} attempts. Last error: ${getErrorMessage(lastError)}`);
-}
+const JobSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  organization: z.string().min(1, "Organization is required"),
+  location: z.string().optional().nullable(),
+  salary_text: z.string().optional().nullable(),
+  education_level_text: z.string().optional().nullable(),
+  link: z.string().url("Invalid URL"),
+  city: z.string().optional().nullable(),
+  effective_city: z.string().optional().nullable(),
+  logo_path: z.string().optional().nullable(),
+  deadline_text: z.string().optional().nullable(),
+  deadline_date: z.string().optional().nullable(), // ISO Date string
+  deadline_formatted: z.string().optional().nullable(),
+  source: z.string().optional().nullable(),
+  searchable_text: z.string().optional().nullable(),
+  type: z.enum(['concurso', 'processo_seletivo']).optional().nullable(),
+  normalized_effective_city: z.string().optional().nullable(),
+  max_salary_numeric: z.number().optional().nullable(),
+  min_salary_numeric: z.number().optional().nullable(),
+  vacancies_numeric: z.number().optional().nullable(),
+  education_levels: z.array(z.string()).optional().nullable(),
+  parsed_salary_text: z.string().optional().nullable(),
+  parsed_vacancies_text: z.string().optional().nullable(),
+  parsed_roles: z.array(z.string()).optional().nullable(),
+  mentioned_states: z.array(z.string()).optional().nullable(),
+  last_run_id: z.string().uuid(),
+  updated_at: z.string().optional().nullable(),
+});
 
 function titleCase(str: string): string {
     if (!str) return '';
@@ -278,19 +265,44 @@ function parseDeadlineInfo(text: string | null | undefined): { dateForSort: stri
     const dateRegex = /(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/g;
     const dates: Date[] = [];
     const currentYear = new Date().getFullYear();
-    let match;
-    while ((match = dateRegex.exec(lowerText)) !== null) {
-        const day = parseInt(match[1], 10);
-        const month = parseInt(match[2], 10);
-        let year = match[3] ? parseInt(match[3], 10) : currentYear;
-        if (year < 100) {
-            year += 2000;
-        }
+    const normalizeYear = (year: number) => (year < 100 ? year + 2000 : year);
+    const buildDate = (day: number, month: number, year: number): Date | null => {
         if (day > 0 && day <= 31 && month > 0 && month <= 12) {
             const dateObj = new Date(Date.UTC(year, month - 1, day));
-            if (dateObj.getUTCMonth() === month - 1) {
-                dates.push(dateObj);
-            }
+            if (dateObj.getUTCMonth() === month - 1) return dateObj;
+        }
+        return null;
+    };
+
+    // Sites como o PCI costumam abreviar a data inicial de um intervalo, omitindo
+    // o mês e/ou o ano (ex.: "01 a 30/07/2026" ou "09/06 a 13/07/2026"). O laço
+    // genérico abaixo enxergaria apenas a data final nesses casos, descartando o
+    // início do intervalo. Por isso tentamos primeiro casar esse padrão explícito
+    // e completar a data inicial com o mês/ano da data final.
+    const rangeMatch = lowerText.match(/(?<![\d\/])(\d{1,2})(?!\d)(?:\/(\d{1,2})(?!\d))?\s*a\s+(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (rangeMatch) {
+        const day1 = parseInt(rangeMatch[1], 10);
+        const day2 = parseInt(rangeMatch[3], 10);
+        const month2 = parseInt(rangeMatch[4], 10);
+        const year2 = normalizeYear(parseInt(rangeMatch[5], 10));
+        const month1 = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : month2;
+        // Se o mês inicial "vem depois" do mês final, o intervalo provavelmente
+        // cruza a virada do ano para trás (ex.: "28/12 a 04/01/2027" começa em 2026).
+        const year1 = month1 > month2 ? year2 - 1 : year2;
+        const startDate = buildDate(day1, month1, year1);
+        const endDate = buildDate(day2, month2, year2);
+        if (startDate) dates.push(startDate);
+        if (endDate) dates.push(endDate);
+    }
+
+    if (dates.length === 0) {
+        let match;
+        while ((match = dateRegex.exec(lowerText)) !== null) {
+            const day = parseInt(match[1], 10);
+            const month = parseInt(match[2], 10);
+            const year = normalizeYear(match[3] ? parseInt(match[3], 10) : currentYear);
+            const dateObj = buildDate(day, month, year);
+            if (dateObj) dates.push(dateObj);
         }
     }
     if (dates.length === 0) {
@@ -395,7 +407,7 @@ async function scrapeAllJobs() {
           jobs.push(job);
         }
       } catch (error) {
-        console.error('Error parsing a single job item, skipping. Error:', getErrorMessage(error));
+        log('ERROR', 'Error parsing a single job item, skipping.', { error: getErrorMessage(error) });
       }
     });
     return jobs;
@@ -407,14 +419,14 @@ async function scrapeAllJobs() {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Fetch failed for region ${region} with status ${response.status}`);
         return await response.text();
-      }, MAX_RETRIES, INITIAL_RETRY_DELAY_MS);
+      }, MAX_RETRIES, INITIAL_RETRY_DELAY_MS, `Scrape ${region}`);
       const doc = new DOMParser().parseFromString(htmlText, "text/html");
       if (!doc) return [];
       const jobs = parseJobsFromDoc(doc, url);
-      console.log(`Region ${region}: found ${jobs.length} jobs.`);
+      log('INFO', `Region ${region}: found ${jobs.length} jobs.`);
       return jobs;
     } catch (error) {
-      console.error(`Error scraping region ${region}:`, getErrorMessage(error));
+      log('ERROR', `Error scraping region ${region}:`, { error: getErrorMessage(error) });
       return [];
     }
   });
@@ -424,8 +436,6 @@ async function scrapeAllJobs() {
 
 /**
  * Identifies the image type by analyzing its "magic numbers" (first few bytes).
- * @param buffer The ArrayBuffer containing the image data.
- * @returns An object with the determined contentType and extension, or null if not recognized.
  */
 function getImageType(buffer: ArrayBuffer): { contentType: string; extension: string } | null {
     const view = new Uint8Array(buffer);
@@ -457,7 +467,6 @@ async function processAndUploadLogos(jobs: any[], supabaseAdmin: SupabaseClient<
     const imageUploadPromises = jobs.map(async (job) => {
         const existingLogoPath = existingJobsMap.get(job.link);
         if (existingLogoPath) {
-            console.log(`Logo for "${job.orgao}" already exists. Skipping.`);
             return { ...job, logoPath: existingLogoPath };
         }
         if (!job.logoUrl) {
@@ -473,7 +482,7 @@ async function processAndUploadLogos(jobs: any[], supabaseAdmin: SupabaseClient<
             const imageType = getImageType(imageBuffer);
 
             if (!imageType) {
-                console.warn(`Could not determine image type for ${job.logoUrl}. Skipping logo.`);
+                log('WARN', `Could not determine image type for ${job.logoUrl}. Skipping logo.`);
                 return { ...job, logoPath: null };
             }
 
@@ -490,7 +499,7 @@ async function processAndUploadLogos(jobs: any[], supabaseAdmin: SupabaseClient<
             }
             return { ...job, logoPath: filePath };
         } catch (error) {
-            console.warn(`Could not process logo for ${job.orgao} from ${job.logoUrl}. Error: ${getErrorMessage(error)}`);
+            log('WARN', `Could not process logo for ${job.orgao} from ${job.logoUrl}. Error: ${getErrorMessage(error)}`);
             return { ...job, logoPath: null };
         }
     });
@@ -499,24 +508,20 @@ async function processAndUploadLogos(jobs: any[], supabaseAdmin: SupabaseClient<
         if (result.status === 'fulfilled') {
             return result.value;
         }
-        console.error("A logo failed to be processed:", result.reason);
+        log('ERROR', "A logo failed to be processed", { reason: result.reason });
         // Return the original job data without logo path on failure
-        // Assuming the reason object might hold the job data for recovery
-        const failedJob = (result.reason as any)?.job || {}; 
-        return { ...failedJob, logoPath: null };
+        return { ...((result as any).value || {}), logoPath: null };
     });
 }
 
 
 // --- Servidor Principal ---
 serve(async (req)=>{
-  if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: CORS_HEADERS
-    });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
+
   try {
-    console.log("Job scraping started...");
+    log('INFO', "Job scraping started...");
     const runId = crypto.randomUUID();
     const allJobsRaw = await scrapeAllJobs();
     
@@ -527,7 +532,7 @@ serve(async (req)=>{
     const supabaseAdmin: SupabaseClient<Database> = createClient<Database>(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
 
     const scrapedLinks = allJobsRaw.map(job => job.link);
-    console.log(`Scraped ${scrapedLinks.length} links. Checking for existing jobs in the database in chunks...`);
+    log('INFO', `Scraped ${scrapedLinks.length} links. Checking for existing jobs...`);
 
     const CHUNK_SIZE = 100;
     const promises = [];
@@ -544,7 +549,7 @@ serve(async (req)=>{
     const results = await Promise.all(promises);
     const existingJobs = results.flatMap(result => {
         if (result.error) {
-            console.error("Error in one of the chunks:", result.error);
+            log('ERROR', "Error fetching existing jobs chunk", { error: result.error });
             throw new Error(`Failed to fetch a chunk of existing jobs: ${getErrorMessage(result.error)}`);
         }
         return result.data || [];
@@ -556,17 +561,21 @@ serve(async (req)=>{
             existingJobsMap.set(job.link, job.logo_path);
         }
     }
-    console.log(`Found ${existingJobsMap.size} existing jobs in the database.`);
+    log('INFO', `Found ${existingJobsMap.size} existing jobs in the database.`);
 
-    console.log(`Processing ${allJobsRaw.length} logos...`);
+    log('INFO', `Processing ${allJobsRaw.length} logos...`);
     const allJobsWithLogoPath = await processAndUploadLogos(allJobsRaw, supabaseAdmin, existingJobsMap);
     
     let uploadedLogoCount = allJobsWithLogoPath.filter(job => job.logoPath && !existingJobsMap.has(job.link)).length;
-    console.log(`Finished processing logos. ${uploadedLogoCount} NEW logos uploaded to storage.`);
+    log('INFO', `Finished processing logos. ${uploadedLogoCount} NEW logos uploaded.`);
     
-    console.log(`Upserting ${allJobsWithLogoPath.length} jobs into database with run_id: ${runId}`);
+    log('INFO', `Validating and upserting ${allJobsWithLogoPath.length} jobs with run_id: ${runId}`);
     
-    const jobsToUpsert = allJobsWithLogoPath.map((job) => ({
+    const now = new Date().toISOString();
+
+    // Map to DB structure AND Validate with Zod
+    const jobsToUpsert = allJobsWithLogoPath
+      .map((job) => ({
         title: job.titulo,
         organization: job.orgao,
         location: job.localidade,
@@ -591,13 +600,30 @@ serve(async (req)=>{
         parsed_vacancies_text: job.parsedVacancies,
         parsed_roles: job.parsedRoles,
         mentioned_states: job.mentionedStates,
-        last_run_id: runId
-    }));
+        last_run_id: runId,
+        updated_at: now
+    }))
+    .filter(job => {
+        const result = JobSchema.safeParse(job);
+        if (!result.success) {
+            log('WARN', 'Skipping job due to validation failure', { 
+                link: job.link, 
+                errors: result.error.format() 
+            });
+            return false;
+        }
+        return true;
+    });
+
+    if (jobsToUpsert.length === 0) {
+        throw new Error("No jobs passed validation. Aborting upsert.");
+    }
       
+    // Use upsert with a larger batch size if needed, or stick to default
     const { error: upsertError } = await supabaseAdmin.from('job_openings').upsert(jobsToUpsert, { onConflict: 'link' });
     if (upsertError) throw new Error(`Failed to upsert jobs: ${getErrorMessage(upsertError)}`);
 
-    console.log(`Deleting stale jobs (not part of run_id ${runId})...`);
+    log('INFO', `Deleting stale jobs (not part of run_id ${runId})...`);
     const { count: deleteCount, error: deleteError } = await supabaseAdmin
         .from('job_openings')
         .delete({ count: 'exact' })
@@ -605,22 +631,18 @@ serve(async (req)=>{
 
     let deletedCount = deleteCount || 0;
     if (deleteError) {
-        console.error(`Failed to delete stale jobs: ${getErrorMessage(deleteError)}`);
+        log('ERROR', `Failed to delete stale jobs: ${getErrorMessage(deleteError)}`);
     } else {
-        console.log(`Deleted ${deletedCount} stale jobs.`);
+        log('INFO', `Deleted ${deletedCount} stale jobs.`);
     }
     
-    const responseBody = {
-      message: `Scraping complete. Upserted/updated ${allJobsWithLogoPath.length} jobs. Uploaded ${uploadedLogoCount} new logos. Deleted ${deletedCount} stale jobs.`
-    };
+    return createSuccessResponse({
+      message: `Scraping complete. Upserted ${jobsToUpsert.length} jobs. Uploaded ${uploadedLogoCount} new logos. Deleted ${deletedCount} stale jobs.`
+    });
 
-    return new Response(JSON.stringify(responseBody), {
-      headers: { ...CORS_HEADERS, "Content-Type": "application/json" }, status: 200
-    });
   } catch (error) {
-    console.error("Main function error:", error);
-    return new Response(JSON.stringify({ error: getErrorMessage(error) }), {
-      headers: { ...CORS_HEADERS, "Content-Type": "application/json" }, status: 500
-    });
+    const errorMessage = getErrorMessage(error);
+    log('ERROR', "Main function error", { error: errorMessage });
+    return createErrorResponse(errorMessage);
   }
 });

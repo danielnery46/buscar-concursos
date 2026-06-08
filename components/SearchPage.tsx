@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { City, SearchCriteria, ViewMode, OpenJobsSortOption } from '../types';
+import { City, SearchCriteria, ViewMode, OpenJobsSortOption, JobInterestFilter } from '../types';
 import { SearchForm } from './SearchForm';
 import { systemDefaultValues, VIZINHANCAS_ESTADOS } from '../constants';
 import { ResultsList } from './ResultsList';
@@ -7,18 +7,61 @@ import { ActiveFiltersDisplay } from './ActiveFiltersDisplay';
 import { FiltersPanel } from './FiltersPanel';
 import { useSettings } from '../contexts/SettingsContext';
 import { useUserData } from '../contexts/UserDataContext';
+import { useJobInterests } from '../contexts/JobInterestsContext';
 import { useJobSearch, calculateActiveFilters } from '../hooks/useJobSearch';
 import { formatSearchCriteria } from '../utils/formatters';
 import { InitialLoadErrorDisplay } from './StateDisplays';
 import { useAuth } from '../contexts/AuthContext';
 import { useModal } from '../contexts/ModalContext';
-import { LayoutGridIcon, ListIcon, SearchIcon } from './Icons';
+import { LayoutGridIcon, ListIcon, SearchIcon, ThumbsUpIcon, ThumbsDownIcon, HelpCircleIcon } from './Icons';
 import { Button } from './ui/Button';
 import { normalizeText } from '../utils/text';
 import { Alert } from './ui/Alert';
 import { Input } from './ui/Input';
 import { useDebounce } from '../hooks/useDebounce';
 import { SortButton } from './ui/SortButton';
+
+const INTEREST_FILTER_KEY = 'buscarConcursosInterestFilter_v1';
+
+/** Controle segmentado "Todos / Com interesse / Sem interesse / Sem classificação" para filtrar a lista pela marcação de interesse do usuário. */
+const InterestFilterControl: React.FC<{
+    value: JobInterestFilter;
+    onChange: (value: JobInterestFilter) => void;
+    interestedCount: number;
+    notInterestedCount: number;
+}> = ({ value, onChange, interestedCount, notInterestedCount }) => {
+    const options: { value: JobInterestFilter; label: string; icon?: React.ReactElement; activeClasses: string; count?: number }[] = [
+        { value: 'all', label: 'Todos', activeClasses: 'bg-indigo-600 text-white shadow-sm' },
+        { value: 'interested', label: 'Com interesse', icon: <ThumbsUpIcon className="h-4 w-4" />, activeClasses: 'bg-emerald-600 text-white shadow-sm', count: interestedCount },
+        { value: 'unmarked', label: 'Sem classificação', icon: <HelpCircleIcon className="h-4 w-4" />, activeClasses: 'bg-slate-600 text-white shadow-sm' },
+        { value: 'not_interested', label: 'Sem interesse', icon: <ThumbsDownIcon className="h-4 w-4" />, activeClasses: 'bg-rose-600 text-white shadow-sm', count: notInterestedCount },
+    ];
+
+    return (
+        <div role="group" aria-label="Filtrar por marcação de interesse" className="flex items-center gap-1 p-1 rounded-xl bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 w-full">
+            {options.map(opt => {
+                const isActive = value === opt.value;
+                return (
+                    <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => onChange(opt.value)}
+                        aria-pressed={isActive}
+                        className={`flex-1 inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs sm:text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 dark:focus:ring-offset-slate-800 focus:ring-indigo-500 ${isActive ? opt.activeClasses : 'text-gray-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700'}`}
+                    >
+                        {opt.icon}
+                        {opt.label}
+                        {typeof opt.count === 'number' && opt.count > 0 && (
+                            <span className={`inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full text-[10px] font-bold ${isActive ? 'bg-white/25 text-white' : 'bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-slate-300'}`}>
+                                {opt.count}
+                            </span>
+                        )}
+                    </button>
+                );
+            })}
+        </div>
+    );
+};
 
 const ITEMS_PER_PAGE = 12;
 
@@ -46,6 +89,7 @@ const SearchPage: React.FC<SearchPageProps> = ({
     const { favoriteSearches, defaultSearch, isUserDataLoaded, cidadeRota, setCidadeRota } = useUserData();
     const { user } = useAuth();
     const { openModal } = useModal();
+    const { interestMap, isLoaded: areInterestsLoaded, interestedCount, notInterestedCount } = useJobInterests();
 
     const [isCityDataLoading, setIsCityDataLoading] = useState(false);
     const [isProximityLoading, setIsProximityLoading] = useState(false);
@@ -53,6 +97,25 @@ const SearchPage: React.FC<SearchPageProps> = ({
 
     const [localQuickSearch, setLocalQuickSearch] = useState('');
     const debouncedQuickSearch = useDebounce(localQuickSearch, 800);
+
+    const [interestFilter, setInterestFilter] = useState<JobInterestFilter>(() => {
+        try {
+            const stored = localStorage.getItem(INTEREST_FILTER_KEY);
+            return (stored === 'interested' || stored === 'not_interested' || stored === 'unmarked') ? stored : 'all';
+        } catch {
+            return 'all';
+        }
+    });
+
+    const handleInterestFilterChange = useCallback((value: JobInterestFilter) => {
+        setInterestFilter(value);
+        try {
+            if (value === 'all') localStorage.removeItem(INTEREST_FILTER_KEY);
+            else localStorage.setItem(INTEREST_FILTER_KEY, value);
+        } catch {
+            // Armazenamento indisponível — ignora silenciosamente.
+        }
+    }, []);
 
     const {
         criteria,
@@ -69,7 +132,14 @@ const SearchPage: React.FC<SearchPageProps> = ({
         setConcursosPage,
         processosPage,
         setProcessosPage,
-    } = useJobSearch(cityDataCache, defaultSearch, isUserDataLoaded, isCityDataLoading, ITEMS_PER_PAGE, isActive, debouncedQuickSearch);
+    } = useJobSearch(
+        cityDataCache, defaultSearch, isUserDataLoaded, isCityDataLoading, ITEMS_PER_PAGE, isActive, debouncedQuickSearch,
+        // O hook cuida tanto do filtro ("Com interesse"/"Sem interesse") quanto do
+        // agrupamento global por interesse (interessantes no topo, sem interesse no
+        // final, respeitando a ordenação escolhida) — ver `useJobSearch` e
+        // `fetchJobsGroupedByInterest` para os detalhes de implementação.
+        interestMap, areInterestsLoaded, interestFilter,
+    );
 
     const [formKey, setFormKey] = useState(0);
     const [targetTab, setTargetTab] = useState<'concursos' | 'processos_seletivos' | null>(null);
@@ -264,6 +334,14 @@ const SearchPage: React.FC<SearchPageProps> = ({
         options={sortOptions}
         />
         </div>
+        {(interestedCount > 0 || notInterestedCount > 0 || interestFilter !== 'all') && (
+            <InterestFilterControl
+                value={interestFilter}
+                onChange={handleInterestFilterChange}
+                interestedCount={interestedCount}
+                notInterestedCount={notInterestedCount}
+            />
+        )}
         {proximityError && <Alert type="error" message={proximityError} />}
         <ActiveFiltersDisplay<SearchCriteria>
         criteria={criteria}

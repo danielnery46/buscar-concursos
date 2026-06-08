@@ -162,3 +162,12 @@ export type OpenJobsSortOption =
     | 'distance-desc';
 
 export type ArticleSortOption = 'date-desc' | 'date-asc';
+
+/** Marcação de interesse do usuário sobre uma vaga/concurso. */
+export type JobInterestStatus = 'interested' | 'not_interested';
+
+/** Mapa `link da vaga -> status de interesse`, mantido em memória pelo hook `useJobInterests`. */
+export type JobInterestMap = Record<string, JobInterestStatus>;
+
+/** Filtro de interesse aplicável na busca: todos, só interessantes, só sem interesse, ou só não classificadas (ainda não avaliadas). */
+export type JobInterestFilter = 'all' | 'interested' | 'not_interested' | 'unmarked';

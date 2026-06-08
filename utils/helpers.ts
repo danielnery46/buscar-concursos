@@ -1,4 +1,4 @@
-import type { ProcessedJob, OpenJobsSortOption } from '../types';
+import type { ProcessedJob, OpenJobsSortOption, JobInterestMap } from '../types';
 
 /**
  * Combina nomes de classe condicionalmente. Alternativa leve ao 'clsx'.
@@ -103,6 +103,51 @@ export function sortJobs(jobs: ProcessedJob[], sort: OpenJobsSortOption): Proces
     });
 
     return sortedJobs;
+}
+
+/**
+ * Agrupa e ordena uma lista COMPLETA de vagas (já carregada em memória — ex: o conjunto
+ * de uma busca por proximidade) de acordo com a marcação de interesse do usuário,
+ * aplicando a ordenação escolhida (`sort`) DENTRO de cada grupo:
+ *
+ *   1) "Tenho interesse"     — ordenadas conforme `sort`
+ *   2) Ainda não avaliadas   — ordenadas conforme `sort`
+ *   3) "Não tenho interesse" — ordenadas conforme `sort`
+ *
+ * Assim, não importa o critério de ordenação escolhido (órgão A-Z, prazo, salário, etc.),
+ * o usuário sempre vê primeiro o que marcou como interessante (já na ordem pedida), depois
+ * o que ainda não avaliou, e por fim o que marcou como sem interesse — sempre sabendo, pela
+ * posição do card, o que já analisou e o que falta ver.
+ *
+ * Use esta função quando o conjunto completo já estiver disponível no cliente (ex: busca
+ * por proximidade). Para buscas paginadas no servidor, veja `fetchJobsGroupedByInterest`,
+ * que aplica esta mesma lógica de agrupamento de forma global e eficiente no banco de dados.
+ *
+ * @param jobs O conjunto completo de vagas a agrupar.
+ * @param interestMap Mapa `link -> status de interesse` do usuário.
+ * @param sort O critério de ordenação atualmente selecionado.
+ * @returns Uma nova lista com "interessantes" no topo, "sem interesse" no final, e cada
+ * grupo internamente ordenado conforme `sort`.
+ */
+export function groupAndSortByInterest(jobs: ProcessedJob[], interestMap: JobInterestMap, sort: OpenJobsSortOption): ProcessedJob[] {
+    if (!jobs.length || !Object.keys(interestMap).length) return sortJobs(jobs, sort);
+
+    const interested: ProcessedJob[] = [];
+    const unmarked: ProcessedJob[] = [];
+    const notInterested: ProcessedJob[] = [];
+
+    for (const job of jobs) {
+        const status = interestMap[job.link];
+        if (status === 'interested') interested.push(job);
+        else if (status === 'not_interested') notInterested.push(job);
+        else unmarked.push(job);
+    }
+
+    return [
+        ...sortJobs(interested, sort),
+        ...sortJobs(unmarked, sort),
+        ...sortJobs(notInterested, sort),
+    ];
 }
 
 

@@ -18,7 +18,7 @@ import { ProcessedJob, ProcessedPredictedJob, SearchCriteria, PredictedCriteria 
 import { supabase } from '../utils/supabase';
 // Import normalizeText from its dedicated module.
 import { normalizeText } from '../utils/text';
-import { ESTADOS_POR_REGIAO, VIZINHANCAS_ESTADOS } from '../constants';
+import { ESTADOS_POR_REGIAO, VIZINHANCAS_ESTADOS, years } from '../constants';
 import { retryAsync } from '../utils/helpers';
 import { queryCache, buildCacheKey } from '../utils/queryCache';
 
@@ -76,8 +76,28 @@ const predictedJobMapper = (item: any): ProcessedPredictedJob => {
     };
 };
 
-function buildBaseJobQuery(selectString: string, criteria: SearchCriteria, quickSearchTerm: string, signal?: AbortSignal) {
-    let query = supabase.from('job_openings').select(selectString, { count: 'exact' });
+/**
+ * Filtro por `link` usado para restringir (`in`) ou excluir (`not_in`) um conjunto
+ * limitado e conhecido de vagas — usado pelo sistema de marcação de interesse, cujas
+ * listas de links (marcações do próprio usuário) são sempre pequenas e já carregadas
+ * em memória, tornando esse filtro seguro e barato no nível do banco de dados.
+ */
+export type JobLinkFilter = { mode: 'in' | 'not_in'; links: string[] };
+
+/**
+ * Formata uma lista de strings no formato de lista do PostgREST `(\"a\",\"b\",...)`,
+ * citando e escapando valores que contenham caracteres especiais (vírgula, parênteses,
+ * aspas ou barra invertida) — necessário para o operador `not.in`, que (ao contrário de
+ * `.in()`) recebe a lista já serializada como string.
+ */
+function formatPostgrestList(values: string[]): string {
+    return `(${values.map(v => (
+        /[,()"\\]/.test(v) ? `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : v
+    )).join(',')})`;
+}
+
+function buildBaseJobQuery(selectString: string, criteria: SearchCriteria, quickSearchTerm: string, signal?: AbortSignal, linkFilter?: JobLinkFilter | null, selectOptions?: { head?: boolean }) {
+    let query = supabase.from('job_openings').select(selectString, { count: 'exact', head: selectOptions?.head });
     if (signal) {
         query = query.abortSignal(signal);
     }
@@ -148,18 +168,32 @@ function buildBaseJobQuery(selectString: string, criteria: SearchCriteria, quick
     if (criteria.cidadeFiltro && criteria.estado.length === 2 && !isDistanceSearch) {
         query = query.eq('normalized_effective_city', normalizeText(criteria.cidadeFiltro));
     }
+
+    // Filtro por marcação de interesse do usuário ("Com interesse" / "Sem interesse" / agrupamento).
+    // As listas de links são pequenas (apenas as marcações do próprio usuário, já carregadas
+    // em memória), então restringir (`in`) ou excluir (`not_in`) por elas é seguro e barato.
+    if (linkFilter) {
+        if (linkFilter.mode === 'in') {
+            // Lista vazia => nenhuma vaga pode satisfazer o filtro; usamos um valor
+            // inexistente para que a consulta retorne naturalmente zero resultados.
+            query = query.in('link', linkFilter.links.length > 0 ? linkFilter.links : ['__none__']);
+        } else if (linkFilter.links.length > 0) {
+            query = query.not('link', 'in', formatPostgrestList(linkFilter.links));
+        }
+    }
+
     return query;
 }
 
-export async function fetchJobs(criteria: SearchCriteria, page: number, pageSize: number, type: 'concurso' | 'processo_seletivo' | 'all', quickSearchTerm: string, signal?: AbortSignal) {
+export async function fetchJobs(criteria: SearchCriteria, page: number, pageSize: number, type: 'concurso' | 'processo_seletivo' | 'all', quickSearchTerm: string, signal?: AbortSignal, linkFilter?: JobLinkFilter | null) {
     const isDistanceSearch = criteria.distanciaRaio && criteria.cidadeFiltro && criteria.estado.length === 2;
 
     // Check cache first (skip for aborted requests)
-    const cacheKey = buildCacheKey('fetchJobs', type, criteria, page, pageSize, quickSearchTerm);
+    const cacheKey = buildCacheKey('fetchJobs', type, criteria, page, pageSize, quickSearchTerm, linkFilter ?? null);
     const cached = queryCache.get<{ jobs: ProcessedJob[]; count: number }>(cacheKey);
     if (cached) return cached;
 
-    let query = buildBaseJobQuery(JOB_OPENINGS_LIST_COLUMNS, criteria, quickSearchTerm, signal);
+    let query = buildBaseJobQuery(JOB_OPENINGS_LIST_COLUMNS, criteria, quickSearchTerm, signal, linkFilter);
 
     if (type !== 'all') {
         query = query.eq('type', type);
@@ -256,14 +290,143 @@ export async function fetchJobs(criteria: SearchCriteria, page: number, pageSize
     }
 }
 
-export async function fetchJobsSummary(criteria: SearchCriteria, quickSearchTerm: string, signal?: AbortSignal) {
+/**
+ * Busca vagas paginadas com agrupamento GLOBAL por marcação de interesse, respeitando
+ * a ordenação escolhida (`criteria.sort`) dentro de cada grupo, na seguinte ordem:
+ *   1) "Tenho interesse"     — ordenadas conforme `criteria.sort`
+ *   2) Ainda não avaliadas   — ordenadas conforme `criteria.sort`
+ *   3) "Não tenho interesse" — ordenadas conforme `criteria.sort`
+ *
+ * Diferente do agrupamento client-side (`applyInterestGrouping`, que reordena apenas
+ * a página já carregada), esta função garante o agrupamento correto em TODA a base —
+ * "encaixando" até três sub-consultas (uma por grupo) na janela de paginação solicitada,
+ * sem precisar trazer todos os resultados para o cliente. Isso só é viável porque as
+ * listas `interestedLinks`/`notInterestedLinks` são pequenas e conhecidas (apenas as
+ * marcações do próprio usuário, já carregadas em memória).
+ */
+export async function fetchJobsGroupedByInterest(
+    criteria: SearchCriteria,
+    page: number,
+    pageSize: number,
+    type: 'concurso' | 'processo_seletivo' | 'all',
+    quickSearchTerm: string,
+    interestedLinks: string[],
+    notInterestedLinks: string[],
+    signal?: AbortSignal,
+): Promise<{ jobs: ProcessedJob[]; count: number }> {
+    const cacheKey = buildCacheKey('fetchJobsGroupedByInterest', type, criteria, page, pageSize, quickSearchTerm, interestedLinks, notInterestedLinks);
+    const cached = queryCache.get<{ jobs: ProcessedJob[]; count: number }>(cacheKey);
+    if (cached) return cached;
+
+    type InterestGroupMode = 'interested' | 'unmarked' | 'not_interested';
+    const allMarkedLinks = [...interestedLinks, ...notInterestedLinks];
+
+    const buildGroupQuery = (selectString: string, mode: InterestGroupMode, selectOptions?: { head?: boolean }) => {
+        let linkFilter: JobLinkFilter | null;
+        if (mode === 'interested') linkFilter = { mode: 'in', links: interestedLinks };
+        else if (mode === 'not_interested') linkFilter = { mode: 'in', links: notInterestedLinks };
+        else linkFilter = allMarkedLinks.length > 0 ? { mode: 'not_in', links: allMarkedLinks } : null;
+
+        let q = buildBaseJobQuery(selectString, criteria, quickSearchTerm, signal, linkFilter, selectOptions);
+        if (type !== 'all') q = q.eq('type', type);
+
+        // Mesma lógica de ordenação de `fetchJobs`, aplicada dentro de cada grupo.
+        const { sort } = criteria;
+        if (sort.startsWith('alpha')) q = q.order('organization', { ascending: sort === 'alpha-asc' });
+        else if (sort.startsWith('salary')) q = q.order('max_salary_numeric', { ascending: sort === 'salary-asc', nullsFirst: false });
+        else if (sort.startsWith('vacancies')) q = q.order('vacancies_numeric', { ascending: sort === 'vacancies-asc', nullsFirst: false });
+        else if (sort.startsWith('deadline')) q = q.order('deadline_date', { ascending: sort === 'deadline-asc', nullsFirst: false });
+        return q;
+    };
+
+    try {
+        // 1) Conta cada grupo com consultas leves "head-only" (sem trazer linhas) —
+        // pulamos a consulta quando já sabemos que o grupo está vazio (sem marcações daquele tipo).
+        const countGroup = async (mode: InterestGroupMode, knownEmpty: boolean): Promise<number> => {
+            if (knownEmpty) return 0;
+            const result = await retryAsync(async () => {
+                const r = await buildGroupQuery('link', mode, { head: true });
+                if (r.error) throw r.error;
+                return r;
+            }, 3, 300);
+            return result.count ?? 0;
+        };
+
+        const [countInterested, countUnmarked, countNotInterested] = await Promise.all([
+            countGroup('interested', interestedLinks.length === 0),
+            countGroup('unmarked', false),
+            countGroup('not_interested', notInterestedLinks.length === 0),
+        ]);
+
+        const total = countInterested + countUnmarked + countNotInterested;
+
+        // 2) Determina quais grupos a janela [from, to] da página solicitada cobre, e
+        // busca apenas as fatias necessárias de cada um (no máximo 3 sub-buscas, já que
+        // uma página de tamanho fixo pode, no pior caso, atravessar as duas fronteiras).
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+
+        const groups: { mode: InterestGroupMode; start: number; count: number }[] = [
+            { mode: 'interested', start: 0, count: countInterested },
+            { mode: 'unmarked', start: countInterested, count: countUnmarked },
+            { mode: 'not_interested', start: countInterested + countUnmarked, count: countNotInterested },
+        ];
+
+        const fetchSlices = await Promise.all(groups.map(async (group) => {
+            if (group.count === 0) return [] as any[];
+
+            const groupEnd = group.start + group.count - 1;
+            const sliceFrom = Math.max(from, group.start);
+            const sliceTo = Math.min(to, groupEnd);
+            if (sliceFrom > sliceTo) return [] as any[];
+
+            const relativeFrom = sliceFrom - group.start;
+            const relativeTo = sliceTo - group.start;
+
+            const result = await retryAsync(async () => {
+                const r = await buildGroupQuery(JOB_OPENINGS_LIST_COLUMNS, group.mode).range(relativeFrom, relativeTo);
+                if (r.error) throw r.error;
+                return r;
+            }, 3, 300);
+            return result.data || [];
+        }));
+
+        const jobs = fetchSlices.flat().map(jobMapper);
+        const result = { jobs, count: total };
+        if (!signal?.aborted) queryCache.set(cacheKey, result);
+        return result;
+    } catch (error: any) {
+        const isAbortError = error.name === 'AbortError' || (error.message && error.message.includes('The operation was aborted'));
+        if (isAbortError) {
+            const abortErr = new Error("The operation was aborted.");
+            abortErr.name = "AbortError";
+            throw abortErr;
+        }
+
+        const lowerCaseMessage = (error.message || '').toLowerCase();
+        if (lowerCaseMessage.includes('networkerror') || lowerCaseMessage.includes('failed to fetch')) {
+            window.dispatchEvent(new CustomEvent('networkError'));
+        }
+
+        console.error(`Error fetching interest-grouped jobs (type: ${type}) after retries:`, error);
+
+        let userMessage = 'Falha ao buscar vagas. Verifique sua conexão e tente novamente.';
+        if (error.message && error.message.toLowerCase().includes('statement timeout')) {
+            userMessage = 'A busca demorou demais para responder. Tente usar filtros mais específicos para refinar sua pesquisa.';
+        }
+
+        throw new Error(userMessage);
+    }
+}
+
+export async function fetchJobsSummary(criteria: SearchCriteria, quickSearchTerm: string, signal?: AbortSignal, linkFilter?: JobLinkFilter | null) {
     // Check cache first — summary is expensive and changes rarely within a session
-    const cacheKey = buildCacheKey('fetchJobsSummary', criteria, quickSearchTerm);
+    const cacheKey = buildCacheKey('fetchJobsSummary', criteria, quickSearchTerm, linkFilter ?? null);
     const cached = queryCache.get<{ totalOpportunities: number; totalVacancies: number; highestSalary: number }>(cacheKey);
     if (cached) return cached;
 
     // Only select columns needed for summary to optimize payload
-    let query = buildBaseJobQuery('vacancies_numeric, max_salary_numeric', criteria, quickSearchTerm, signal);
+    let query = buildBaseJobQuery('vacancies_numeric, max_salary_numeric', criteria, quickSearchTerm, signal, linkFilter);
 
     try {
         // Fetch only the first batch. The total count comes from Supabase's
@@ -378,9 +541,22 @@ export async function fetchArticles(table: 'predicted_openings' | 'news_articles
         const y = parseInt(year, 10);
         query = query.gte('publication_date', `${y}-01-01`).lt('publication_date', `${y + 1}-01-01`);
     } else if (month !== 'todos') {
-        // Mês sem ano: sem como usar range — mantém LIKE (varredura por prefixo pode não usar índice)
-        const datePattern = `%-${String(parseInt(month, 10)).padStart(2, '0')}-%`;
-        query = query.like('publication_date', datePattern);
+        // Mês sem ano: `publication_date` é do tipo `date` no Postgres, e o operador
+        // `LIKE`/`~~` (usado por `.like()`) não existe para esse tipo — gerava o erro
+        // "operator does not exist: date ~~ unknown" e quebrava a busca. Para filtrar
+        // por mês independente do ano sem usar LIKE, combinamos (`.or()`) um intervalo
+        // [gte, lt) por ano — usando os mesmos anos disponíveis no seletro "Ano" — o
+        // que usa apenas operadores nativos de comparação de datas (compatíveis com
+        // índice B-tree).
+        const m = parseInt(month, 10);
+        const orFilter = years.map(y => {
+            const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+            const endYear = m === 12 ? y + 1 : y;
+            const endMonth = m === 12 ? 1 : m + 1;
+            const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
+            return `and(publication_date.gte.${startDate},publication_date.lt.${endDate})`;
+        }).join(',');
+        query = query.or(orFilter);
     }
 
     if (sources && sources.length > 0) {

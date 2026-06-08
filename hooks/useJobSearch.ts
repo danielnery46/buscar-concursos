@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
-import { City, ProcessedJob, SearchCriteria, SummaryData } from '../types';
+import { useState, useEffect, useMemo } from 'react';
+import { City, ProcessedJob, SearchCriteria, SummaryData, JobInterestMap, JobInterestFilter } from '../types';
 import { useDebounce } from './useDebounce';
 // FIX: Import geo and text utilities from their dedicated modules and sortJobs from helpers.
-import { sortJobs } from '../utils/helpers';
+import { groupAndSortByInterest } from '../utils/helpers';
 import { processJobData, calculateDrivingDistances, haversineDistance } from '../utils/geo';
 import { normalizeText } from '../utils/text';
 import { systemDefaultValues } from '../constants';
-import { fetchJobs, fetchJobsSummary } from '../services/scrapingService';
+import { fetchJobs, fetchJobsSummary, fetchJobsGroupedByInterest, type JobLinkFilter } from '../services/scrapingService';
 
 export const calculateActiveFilters = (criteria: SearchCriteria): number => {
     let count = 0;
@@ -32,6 +32,12 @@ export const useJobSearch = (
     itemsPerPage: number,
     isActive: boolean,
     quickSearchTerm: string,
+    /** Mapa `link -> status de interesse` do usuário (ver `useJobInterests`). */
+    interestMap: JobInterestMap = {},
+    /** `true` quando as marcações de interesse já foram carregadas e podem ser usadas com segurança. */
+    areInterestsLoaded: boolean = true,
+    /** Filtro de interesse selecionado pelo usuário: todos / só interessantes / só sem interesse / só não classificadas. */
+    interestFilter: JobInterestFilter = 'all',
 ) => {
     const [criteria, setCriteria] = useState<SearchCriteria>(systemDefaultValues);
     const debouncedCriteria = useDebounce(criteria, 500);
@@ -51,12 +57,44 @@ export const useJobSearch = (
     const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
     const [isReadyToFetch, setIsReadyToFetch] = useState(false);
 
+    // Deriva, do mapa de marcações, as listas (pequenas e estáveis) de links "com
+    // interesse" e "sem interesse" — usadas tanto para o filtro simples (`.in`) quanto
+    // para o agrupamento global por interesse (`fetchJobsGroupedByInterest`).
+    const { interestedLinks, notInterestedLinks } = useMemo(() => {
+        const interested: string[] = [];
+        const notInterested: string[] = [];
+        for (const [link, status] of Object.entries(interestMap)) {
+            if (status === 'interested') interested.push(link);
+            else if (status === 'not_interested') notInterested.push(link);
+        }
+        interested.sort();
+        notInterested.sort();
+        return { interestedLinks: interested, notInterestedLinks: notInterested };
+    }, [interestMap]);
+
+    const hasAnyInterestMarks = interestedLinks.length > 0 || notInterestedLinks.length > 0;
+
+    // Quando o usuário filtra explicitamente por "Com interesse", "Sem interesse" ou
+    // "Sem classificação", basta restringir/excluir a busca por esses links (`.in`/`.not.in`)
+    // — não há o que agrupar, pois todos os resultados já compartilham o mesmo status.
+    const interestQueryFilter = useMemo<JobLinkFilter | null>(() => {
+        if (interestFilter === 'interested') return { mode: 'in', links: interestedLinks };
+        if (interestFilter === 'not_interested') return { mode: 'in', links: notInterestedLinks };
+        if (interestFilter === 'unmarked') return { mode: 'not_in', links: [...interestedLinks, ...notInterestedLinks] };
+        return null;
+    }, [interestFilter, interestedLinks, notInterestedLinks]);
+
+    // Quando não há filtro explícito ("Todos") mas o usuário já marcou pelo menos uma
+    // vaga, aplicamos o agrupamento GLOBAL por interesse — respeitando a ordenação
+    // escolhida em cada grupo (interessantes no topo, sem interesse no final).
+    const useInterestGrouping = areInterestsLoaded && interestFilter === 'all' && hasAnyInterestMarks;
+
     // This effect resets the page numbers whenever the main search filters change,
     // ensuring new searches always start from the first page.
     useEffect(() => {
         setConcursosPage(1);
         setProcessosPage(1);
-    }, [debouncedCriteria, quickSearchTerm]);
+    }, [debouncedCriteria, quickSearchTerm, interestFilter, interestedLinks, notInterestedLinks]);
 
     useEffect(() => {
         if (isUserDataLoaded) {
@@ -74,8 +112,10 @@ export const useJobSearch = (
     }, [defaultSearch, isUserDataLoaded]);
     
     useEffect(() => {
-        // Guarda de segurança para não executar a busca até que tudo esteja pronto.
-        if (!isActive || !isReadyToFetch || isCityDataLoading) {
+        // Guarda de segurança para não executar a busca até que tudo esteja pronto
+        // (incluindo as marcações de interesse, para evitar buscar sem filtro/agrupamento
+        // e logo em seguida refazer a busca já com eles aplicados).
+        if (!isActive || !isReadyToFetch || isCityDataLoading || !areInterestsLoaded) {
             return;
         }
 
@@ -97,7 +137,7 @@ export const useJobSearch = (
                         return;
                     };
                     
-                    const { jobs: allStateJobs } = await fetchJobs(debouncedCriteria, 1, 1, 'all', quickSearchTerm, controller.signal);
+                    const { jobs: allStateJobs } = await fetchJobs(debouncedCriteria, 1, 1, 'all', quickSearchTerm, controller.signal, interestQueryFilter);
 
                     const allCitiesMap = new Map<string, City>();
                     Object.entries(cityDataCache).forEach(([st, cities]) => {
@@ -131,7 +171,11 @@ export const useJobSearch = (
                     
                     const jobsInRadius = jobsWithDrivingDistance.filter(job => job.distance !== undefined && job.distance <= (distanciaRaio as number));
 
-                    const sortedJobs = sortJobs(jobsInRadius, sort);
+                    // Já temos o conjunto completo em memória aqui, então o agrupamento por
+                    // interesse pode ser feito de forma perfeitamente global (não apenas por
+                    // página): "com interesse" no topo, depois não avaliadas, depois "sem
+                    // interesse" — cada grupo já ordenado conforme o critério escolhido.
+                    const sortedJobs = groupAndSortByInterest(jobsInRadius, useInterestGrouping ? interestMap : {}, sort);
 
                     const finalConcursos = sortedJobs.filter(j => j.type === 'concurso');
                     const finalProcessos = sortedJobs.filter(j => j.type === 'processo_seletivo');
@@ -150,7 +194,7 @@ export const useJobSearch = (
 
                 } else {
                     // Decoupled fetching...
-                    const summaryPromise = fetchJobsSummary(debouncedCriteria, quickSearchTerm, controller.signal)
+                    const summaryPromise = fetchJobsSummary(debouncedCriteria, quickSearchTerm, controller.signal, interestQueryFilter)
                         .then(summary => setSummaryData(summary))
                         .catch(summaryError => {
                             if (summaryError.name !== 'AbortError') {
@@ -159,10 +203,21 @@ export const useJobSearch = (
                             }
                         });
 
-                    const jobsPromise = Promise.all([
-                        fetchJobs(debouncedCriteria, concursosPage, itemsPerPage, 'concurso', quickSearchTerm, controller.signal),
-                        fetchJobs(debouncedCriteria, processosPage, itemsPerPage, 'processo_seletivo', quickSearchTerm, controller.signal),
-                    ]).then(([concursosResult, processosResult]) => {
+                    // Quando não há filtro explícito mas existem marcações, usamos a busca
+                    // com agrupamento global (DB-side) — que já retorna cada página com
+                    // "com interesse" no topo, depois não avaliadas, depois "sem interesse",
+                    // respeitando a ordenação escolhida em cada grupo. Caso contrário, a
+                    // busca paginada padrão (com filtro simples `.in`, se houver) é suficiente.
+                    const jobsPromise = (useInterestGrouping
+                        ? Promise.all([
+                            fetchJobsGroupedByInterest(debouncedCriteria, concursosPage, itemsPerPage, 'concurso', quickSearchTerm, interestedLinks, notInterestedLinks, controller.signal),
+                            fetchJobsGroupedByInterest(debouncedCriteria, processosPage, itemsPerPage, 'processo_seletivo', quickSearchTerm, interestedLinks, notInterestedLinks, controller.signal),
+                        ])
+                        : Promise.all([
+                            fetchJobs(debouncedCriteria, concursosPage, itemsPerPage, 'concurso', quickSearchTerm, controller.signal, interestQueryFilter),
+                            fetchJobs(debouncedCriteria, processosPage, itemsPerPage, 'processo_seletivo', quickSearchTerm, controller.signal, interestQueryFilter),
+                        ])
+                    ).then(([concursosResult, processosResult]) => {
                         setConcursos(concursosResult.jobs);
                         setTotalConcursos(concursosResult.count);
                         setProcessosSeletivos(processosResult.jobs);
@@ -190,7 +245,7 @@ export const useJobSearch = (
 
         fetchData();
         return () => { controller.abort(); };
-    }, [debouncedCriteria, quickSearchTerm, concursosPage, processosPage, isActive, isCityDataLoading, itemsPerPage, isReadyToFetch]);
+    }, [debouncedCriteria, quickSearchTerm, concursosPage, processosPage, isActive, isCityDataLoading, itemsPerPage, isReadyToFetch, areInterestsLoaded, interestFilter, interestedLinks, notInterestedLinks, interestQueryFilter, useInterestGrouping, interestMap]);
 
     return {
         criteria: criteria ?? systemDefaultValues,

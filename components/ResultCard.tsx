@@ -1,5 +1,5 @@
 import React, { useState, useEffect, memo, useMemo, useRef, useCallback } from 'react';
-import { ProcessedJob, IconProps, SearchCriteria, ViewMode } from '../types';
+import { ProcessedJob, IconProps, SearchCriteria, ViewMode, JobInterestStatus } from '../types';
 import { copyToClipboard, prefetchUrl } from '../utils/helpers';
 import {
     CalendarIcon,
@@ -10,13 +10,80 @@ import {
     RouteIcon,
     ShareIcon,
     BriefcaseIcon,
+    ThumbsUpIcon,
+    ThumbsDownIcon,
 } from './Icons';
 import { detailIconMap } from './Icons';
 import { useModal } from '../contexts/ModalContext';
 import { useUserData } from '../contexts/UserDataContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { useJobInterests } from '../contexts/JobInterestsContext';
 import { useCardInteraction } from '../hooks/useCardInteraction';
 import { supabase } from '../utils/supabase';
+
+/**
+ * Par de botões "Tenho interesse" / "Não tenho interesse" exibidos no card da vaga.
+ * Clicar no botão já ativo remove a marcação (volta ao estado "não avaliado").
+ */
+const InterestButtons = memo(function InterestButtons({ status, onSetInterest, dense }: {
+    status: JobInterestStatus | undefined;
+    onSetInterest: (status: JobInterestStatus | null) => void;
+    dense?: boolean;
+}) {
+    const padding = dense ? 'p-1.5' : 'p-2';
+    const isInterested = status === 'interested';
+    const isNotInterested = status === 'not_interested';
+
+    const handleToggle = useCallback((target: JobInterestStatus) => (e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        onSetInterest(status === target ? null : target);
+    }, [status, onSetInterest]);
+
+    return (
+        <>
+            <button
+                onClick={handleToggle('interested')}
+                aria-pressed={isInterested}
+                aria-label={isInterested ? 'Remover marcação de interesse' : 'Marcar que tenho interesse nesta vaga'}
+                title={isInterested ? 'Remover marcação de interesse' : 'Tenho interesse'}
+                className={`${padding} rounded-full transition-colors touch-manipulation focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isInterested ? 'text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-500/20' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+            >
+                <ThumbsUpIcon className="h-5 w-5" />
+            </button>
+            <button
+                onClick={handleToggle('not_interested')}
+                aria-pressed={isNotInterested}
+                aria-label={isNotInterested ? 'Remover marcação de "sem interesse"' : 'Marcar que não tenho interesse nesta vaga'}
+                title={isNotInterested ? 'Remover marcação de "sem interesse"' : 'Não tenho interesse'}
+                className={`${padding} rounded-full transition-colors touch-manipulation focus:outline-none focus:ring-2 focus:ring-rose-500 ${isNotInterested ? 'text-rose-600 bg-rose-100 dark:text-rose-400 dark:bg-rose-500/20' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+            >
+                <ThumbsDownIcon className="h-5 w-5" />
+            </button>
+        </>
+    );
+});
+
+/** Selo discreto exibido no canto do card indicando a marcação de interesse atual. */
+const InterestBadge = memo(function InterestBadge({ status }: { status: JobInterestStatus | undefined }) {
+    if (!status) return null;
+
+    if (status === 'interested') {
+        return (
+            <div className="absolute -top-2 left-3 z-10 inline-flex items-center gap-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 shadow-md shadow-emerald-500/30" title="Você marcou interesse nesta vaga">
+                <ThumbsUpIcon className="h-3 w-3" />
+                Tenho interesse
+            </div>
+        );
+    }
+
+    return (
+        <div className="absolute -top-2 left-3 z-10 inline-flex items-center gap-1 rounded-full bg-slate-400 dark:bg-slate-600 text-white text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 shadow-md" title="Você marcou que não tem interesse nesta vaga">
+            <ThumbsDownIcon className="h-3 w-3" />
+            Sem interesse
+        </div>
+    );
+});
 
 
 interface ResultCardProps {
@@ -54,6 +121,11 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
     const { cidadeRota } = useUserData();
     const { accessibilitySettings } = useSettings();
     const { openLinksInModal, reduceMotion } = accessibilitySettings;
+    const { getInterest, setInterest } = useJobInterests();
+    const interestStatus = getInterest(job.link);
+    const handleSetInterest = useCallback((status: JobInterestStatus | null) => {
+        setInterest(job.link, status);
+    }, [setInterest, job.link]);
     const { handleCardClick } = useCardInteraction({ link: job.link, title: job.orgao, openInModal: openLinksInModal });
     const [copied, setCopied] = useState(false);
     const cardRef = useRef<HTMLDivElement>(null);
@@ -185,6 +257,14 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
 
     const deadlineText = job.prazoInscricaoFormatado;
 
+    // Destaca cards "com interesse" e esmaece os "sem interesse", para que o usuário
+    // identifique rapidamente o que já avaliou (e o que ainda não viu).
+    const interestCardClasses = interestStatus === 'interested'
+        ? 'ring-2 ring-emerald-400/70 dark:ring-emerald-500/50 border-emerald-300/80 dark:border-emerald-600/40'
+        : interestStatus === 'not_interested'
+            ? 'opacity-60 saturate-[0.65] hover:opacity-100 focus-within:opacity-100'
+            : '';
+
     if (viewMode === 'list') {
         const renderListPills = (
             <>
@@ -196,10 +276,11 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
         );
         
         return (
-            <div ref={cardRef} onClick={handleCardClick} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && handleCardClick(e)} role="button" tabIndex={0} 
+            <div ref={cardRef} onClick={handleCardClick} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && handleCardClick(e)} role="button" tabIndex={0}
                 title={openLinksInModal ? "Ctrl+clique para abrir em nova aba" : "Ctrl+clique para abrir na janela"}
-                className="relative group bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-4 hover:border-indigo-500/50 dark:hover:border-indigo-500/80 transition-all duration-200 transform hover:-translate-y-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-slate-900 focus:ring-indigo-500">
-                
+                className={`relative group bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-4 hover:border-indigo-500/50 dark:hover:border-indigo-500/80 transition-all duration-200 transform hover:-translate-y-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-slate-900 focus:ring-indigo-500 ${interestCardClasses}`}>
+                <InterestBadge status={interestStatus} />
+
                 <div className="flex items-start gap-4">
                     <div className="flex-1 min-w-0">
                         <h3 className="text-base sm:text-lg font-bold text-gray-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors leading-tight line-clamp-2" title={job.orgao}>
@@ -242,6 +323,8 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
                         <span className="truncate">{deadlineText || 'Prazo não informado'}</span>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0 -mr-1.5">
+                        <InterestButtons status={interestStatus} onSetInterest={handleSetInterest} />
+                        <span className="w-px h-5 bg-gray-200 dark:bg-slate-700 mx-0.5" aria-hidden="true"></span>
                         {job.cidadeEfetiva && job.localidade.toUpperCase() !== 'NACIONAL' && (
                             <button onClick={handleOpenRoute} aria-label="Ver rota no mapa" title="Ver rota no mapa" className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors touch-manipulation focus:outline-none focus:ring-2 focus:ring-indigo-500">
                                 <RouteIcon className="h-5 w-5"/>
@@ -280,10 +363,11 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
     );
 
     return (
-        <div ref={cardRef} onClick={handleCardClick} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && handleCardClick(e)} role="button" tabIndex={0} 
+        <div ref={cardRef} onClick={handleCardClick} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && handleCardClick(e)} role="button" tabIndex={0}
             title={openLinksInModal ? "Ctrl+clique para abrir em nova aba" : "Ctrl+clique para abrir na janela"}
-            className="relative group flex flex-col h-full bg-white dark:bg-slate-900 dark:bg-gradient-to-br dark:from-slate-900 dark:to-slate-800 border border-gray-200 dark:border-slate-800 rounded-2xl shadow-sm dark:shadow-lg dark:shadow-black/20 p-5 hover:border-indigo-500/50 dark:hover:border-indigo-500/80 transition-all duration-300 transform hover:-translate-y-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-slate-900 focus:ring-indigo-500">
-            
+            className={`relative group flex flex-col h-full bg-white dark:bg-slate-900 dark:bg-gradient-to-br dark:from-slate-900 dark:to-slate-800 border border-gray-200 dark:border-slate-800 rounded-2xl shadow-sm dark:shadow-lg dark:shadow-black/20 p-5 hover:border-indigo-500/50 dark:hover:border-indigo-500/80 transition-all duration-300 transform hover:-translate-y-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-slate-900 focus:ring-indigo-500 ${interestCardClasses}`}>
+            <InterestBadge status={interestStatus} />
+
             <div className="flex items-start gap-4">
                 {optimizedLogoUrl ? (
                     <div className="flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 bg-white rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-200 p-1 overflow-hidden">
@@ -343,6 +427,8 @@ export const ResultCard = memo<ResultCardProps>(function ResultCard({ job, showL
                 </div>
                 
                 <div className="flex items-center gap-1 flex-shrink-0 -mr-1.5">
+                    <InterestButtons status={interestStatus} onSetInterest={handleSetInterest} dense />
+                    <span className="w-px h-5 bg-gray-200 dark:bg-slate-700 mx-0.5" aria-hidden="true"></span>
                     {job.cidadeEfetiva && job.localidade.toUpperCase() !== 'NACIONAL' && (
                         <button onClick={handleOpenRoute} aria-label="Ver rota no mapa" title="Ver rota no mapa" className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500">
                             <RouteIcon className="h-5 w-5"/>

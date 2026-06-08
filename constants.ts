@@ -87,6 +87,7 @@ export const FAVORITE_PREDICTED_FILTERS_KEY = 'buscarConcursosFavoritePredictedF
 export const FAVORITE_NEWS_FILTERS_KEY = 'buscarConcursosFavoriteNewsFilters_v1';
 export const ACCESSIBILITY_SETTINGS_KEY = 'buscarConcursosAccessibilitySettings';
 export const TUTORIAL_KEY = 'buscarConcursosTutorialCompleted_v2';
+export const JOB_INTERESTS_KEY = 'buscarConcursosJobInterests_v1';
 export const THEME_KEY = 'theme';
 export const COOKIE_CONSENT_KEY = 'buscarConcursosCookieConsent_v1';
 

@@ -9,6 +9,8 @@ export const FiltersPanel: React.FC<{
 }> = ({ isOpen, onClose, children }) => {
     const panelRef = useRef<HTMLDivElement>(null);
     const [isMounted, setIsMounted] = useState(false);
+    const [isResizing, setIsResizing] = useState(false);
+    const resizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         // Atraso para habilitar transições para evitar flicker na montagem inicial
@@ -16,9 +18,28 @@ export const FiltersPanel: React.FC<{
         return () => clearTimeout(timer);
     }, []);
 
+    // O painel usa direções de deslize diferentes em mobile (sobe a partir de baixo,
+    // via `translate-y-full`) e em telas `sm+` (entra pela direita, via `translate-x-full`).
+    // Como a transição de transform fica sempre ativa, redimensionar a janela e cruzar
+    // esse breakpoint faz as classes de transform trocarem enquanto a transição ainda
+    // está habilitada — fazendo o painel "voar" diagonalmente de um canto a outro da tela.
+    // Para evitar isso, desabilitamos a transição temporariamente durante o redimensionamento.
+    useEffect(() => {
+        const handleResize = () => {
+            setIsResizing(true);
+            if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
+            resizeTimeoutRef.current = setTimeout(() => setIsResizing(false), 150);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
+        };
+    }, []);
+
     useFocusTrap(isOpen, panelRef, onClose);
-    
-    const transitionClasses = isMounted ? 'transition-transform duration-300 ease-in-out' : '';
+
+    const transitionClasses = (isMounted && !isResizing) ? 'transition-transform duration-300 ease-in-out' : '';
     const transformClasses = isOpen
       ? 'translate-y-0 sm:translate-x-0'
       : 'translate-y-full sm:translate-y-0 sm:translate-x-full';

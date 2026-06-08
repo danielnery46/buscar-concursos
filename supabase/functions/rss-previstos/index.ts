@@ -71,15 +71,37 @@ serve(async (req) => {
             query = query.or(orFilter);
         }
     }
-    if (searchParams.get("year")) {
-        const year = searchParams.get("year")!;
-        const month = searchParams.get("month");
-        const datePattern = `${year}-${month ? String(month).padStart(2, '0') : '%'}-%`;
-        query = query.like('publication_date', datePattern);
-    } else if (searchParams.get("month")) {
-        const month = searchParams.get("month")!;
-        const datePattern = `%-{String(month).padStart(2, '0')}-%`;
-        query = query.like('publication_date', datePattern);
+    // `publication_date` é do tipo `date` no Postgres — o operador `LIKE`/`~~` (usado por
+    // `.like()`) não existe para esse tipo (gera "operator does not exist: date ~~ unknown"
+    // e quebra a resposta com erro 500). Usamos intervalos `[gte, lt)` por data, que usam
+    // operadores nativos de comparação (e podem aproveitar índice B-tree).
+    const yearParam = searchParams.get("year");
+    const monthParam = searchParams.get("month");
+    if (yearParam && monthParam) {
+        const y = parseInt(yearParam, 10);
+        const m = parseInt(monthParam, 10);
+        const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+        const endYear = m === 12 ? y + 1 : y;
+        const endMonth = m === 12 ? 1 : m + 1;
+        const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
+        query = query.gte('publication_date', startDate).lt('publication_date', endDate);
+    } else if (yearParam) {
+        const y = parseInt(yearParam, 10);
+        query = query.gte('publication_date', `${y}-01-01`).lt('publication_date', `${y + 1}-01-01`);
+    } else if (monthParam) {
+        // Mês sem ano: combina (`.or()`) um intervalo `[gte, lt)` por ano, cobrindo a
+        // mesma janela de anos exibida no seletor "Ano" do site (ano atual +1 até -3).
+        const m = parseInt(monthParam, 10);
+        const currentYear = new Date().getUTCFullYear();
+        const yearsWindow = [currentYear + 1, currentYear, currentYear - 1, currentYear - 2, currentYear - 3];
+        const orFilter = yearsWindow.map((y) => {
+            const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+            const endYear = m === 12 ? y + 1 : y;
+            const endMonth = m === 12 ? 1 : m + 1;
+            const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
+            return `and(publication_date.gte.${startDate},publication_date.lt.${endDate})`;
+        }).join(',');
+        query = query.or(orFilter);
     }
 
     const { data: articles, error } = await query;
